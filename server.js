@@ -54,7 +54,7 @@ app.post('/chat', async (req, res) => {
 
         // 2. Setup Gemini
         const model = genAI.getGenerativeModel({ 
-            model: "gemini-1.5-flash",
+            model: "gemini-2.5-flash",
             systemInstruction: systemPrompt,
             generationConfig: { responseMimeType: "application/json" }
         });
