@@ -32,24 +32,31 @@ async function urlToGenerativePart(url) {
 // --- SYSTEM INSTRUCTIONS ---
 const systemPrompt = `
 You are a senior sales agent for "The Window Valet". 
-GOAL: Secure a lead by getting the customer's NAME and CONTACT INFO.
+GOAL: Secure a lead by getting the customer's CONTACT INFO and a HOME VISIT TIME.
 
-VISION CAPABILITIES:
-- The user may upload MULTIPLE images. Look at ALL of them.
-- Analyze the window styles (Bay, Bow, Double-hung, Sliding).
-- Comment on the decor and light levels.
-- Suggest products based on the visuals.
+CORE INFO:
+- Products: Roller Shades, Zebra Blinds, Shutters, Motorization.
+- Owner: Josh LeClair.
+- Location: Indianapolis, IN.
+
+RULES:
+1. **The Home Visit:** You MUST try to schedule a "Free In-Home Estimate." Ask: "When would be a good time for us to come out and measure?"
+2. **Contact Info:** You MUST get their Name AND (Phone OR Email). 
+3. **Preference:** Ask: "Do you prefer we contact you via phone, text, or email?"
+4. **Validation:** If they give a time but no phone/email, keep asking for contact info. You cannot book a slot without a contact.
 
 OUTPUT FORMAT:
 Reply in valid JSON format ONLY. Structure:
 {
-  "reply": "Your response here",
-  "lead_captured": boolean, 
+  "reply": "Your response to the customer",
+  "lead_captured": boolean, (TRUE only if you have Name AND (Phone OR Email)),
   "customer_name": "extracted name or null",
   "customer_phone": "extracted phone or null",
   "customer_email": "extracted email or null",
   "customer_address": "extracted address or null",
-  "summary": "brief summary of needs"
+  "appointment_request": "extracted date/time preference or null",
+  "preferred_method": "Phone, Text, or Email",
+  "ai_summary": "A 2-sentence summary of what they want and their vibe (e.g. 'Customer wants zebra blinds for living room, very price conscious, requested Tuesday visit.')"
 }
 `;
 
@@ -70,73 +77,80 @@ app.get('/init', async (req, res) => {
 app.post('/chat', async (req, res) => {
     try {
         const { history, clientApiKey } = req.body;
+
+        // 1. Check Kill Switch
         const { data: client } = await supabase.from('clients').select('*').eq('api_key', clientApiKey).single();
         if (!client || client.status !== 'active') return res.json({ reply: "Service Suspended." });
 
+        // 2. Setup Gemini
         const model = genAI.getGenerativeModel({ 
             model: "gemini-2.5-flash", 
             systemInstruction: systemPrompt,
             generationConfig: { responseMimeType: "application/json" }
         });
 
-        // --- MULTI-IMAGE PARSING LOGIC ---
-        // We will construct the CURRENT turn prompt by looking at recent history
+        // 3. Image Handling (Keep your existing image logic here!)
+        // ... (Copy the multi-image parsing logic from your previous server.js) ...
+        // [For brevity, I assume you kept the image parsing code. If not, I can re-paste it].
+        // Let's assume 'currentPromptParts' is built correctly here.
+        
+        // --- RE-INSERTING IMAGE LOGIC FOR SAFETY ---
         let currentPromptParts = [];
-        
-        // If the user just sent images, they are in the history array.
-        // We need to grab the LAST user message(s). 
-        // Logic: Grab the last entry. If it has images, download them.
-        
         const lastEntry = history[history.length - 1];
-        
-        // Loop through the parts of the last message to find ALL images
         let foundImage = false;
         
         for (const part of lastEntry.parts) {
-            // Check for our special image tag
             const imgMatch = part.text.match(/\[IMAGE_URL: (.*?)\]/);
-            
             if (imgMatch) {
                 foundImage = true;
-                const imageUrl = imgMatch[1];
-                console.log("👀 Processing Image:", imageUrl);
-                const imagePart = await urlToGenerativePart(imageUrl);
+                const imagePart = await urlToGenerativePart(imgMatch[1]); // Ensure helper function exists
                 if (imagePart) currentPromptParts.push(imagePart);
             } else {
-                // It's just text
                 currentPromptParts.push({ text: part.text });
             }
         }
-
-        // If we found images but no text, add a prompt so Gemini knows what to do
         if (foundImage && currentPromptParts.every(p => p.inlineData)) {
-            currentPromptParts.push({ text: "I have uploaded photos of my windows. Please analyze them and recommend blinds." });
+            currentPromptParts.push({ text: "I have uploaded photos. Please analyze." });
         }
+        // -------------------------------------------
 
-        // Generate
         const result = await model.generateContent(currentPromptParts);
         const text = result.response.text();
         const cleanText = text.replace(/```json/g, '').replace(/```/g, '').trim();
         const jsonResponse = JSON.parse(cleanText);
 
-        // Lead Capture Logic (Same as before)
-        if (jsonResponse.lead_captured && (jsonResponse.customer_phone || jsonResponse.customer_email)) {
-             await supabase.from('leads').insert({
-                client_id: client.id,
-                customer_name: jsonResponse.customer_name,
-                customer_phone: jsonResponse.customer_phone,
-                customer_email: jsonResponse.customer_email,
-                customer_address: jsonResponse.customer_address,
-                project_summary: jsonResponse.summary,
-                full_transcript: JSON.stringify(history) 
-            });
+        // 4. LEAD CAPTURE LOGIC (STRICT)
+        // Only save if lead_captured is TRUE (which Gemini only sets if Name + Contact exists)
+        if (jsonResponse.lead_captured === true) {
+            
+            // Double Validation: Code check
+            const hasContact = jsonResponse.customer_phone || jsonResponse.customer_email;
+            
+            if (hasContact) {
+                console.log("🔥 SAVING LEAD:", jsonResponse.customer_name);
+                
+                await supabase.from('leads').insert({
+                    client_id: client.id,
+                    customer_name: jsonResponse.customer_name,
+                    customer_phone: jsonResponse.customer_phone,
+                    customer_email: jsonResponse.customer_email,
+                    customer_address: jsonResponse.customer_address,
+                    
+                    // NEW FIELDS
+                    appointment_request: jsonResponse.appointment_request,
+                    preferred_method: jsonResponse.preferred_method,
+                    ai_summary: jsonResponse.ai_summary,
+                    
+                    full_transcript: JSON.stringify(history) 
+                });
+            }
         }
 
         res.json({ reply: jsonResponse.reply });
 
     } catch (err) {
         console.error("Server Error:", err);
-        res.status(500).json({ reply: "I'm having trouble analyzing those photos. Please try again." });
+        res.status(500).json({ reply: "I'm having trouble connecting right now." });
     }
 });
 
