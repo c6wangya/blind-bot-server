@@ -90,7 +90,6 @@
             background: white;
         }
         
-        /* TEXTAREA (The Magic Fix for Enter/Shift+Enter) */
         textarea { 
             flex: 1; 
             padding: 12px 15px; 
@@ -105,7 +104,6 @@
         }
         textarea:focus { border-color: #bbb; }
         
-        /* BUTTONS */
         .btn { 
             height: 42px; 
             border: none; 
@@ -117,7 +115,6 @@
             padding: 0 20px;
         }
         
-        /* PAPERCLIP */
         #upload-label {
             width: 42px; height: 42px; 
             background: #f1f3f5; border-radius: 50%; 
@@ -144,19 +141,17 @@
         <div class="controls">
             <label id="upload-label" for="file-input">📎</label>
             <input type="file" id="file-input" accept="image/*" multiple onchange="uploadImage()">
-            
             <textarea id="msg" placeholder="Type a message..." rows="1"></textarea>
-            
             <button id="send-btn" class="btn" onclick="send()">Send</button>
         </div>
     </div>
 
     <script>
         // ============================================================
-        // 🛑 PASTE YOUR KEYS HERE OR IT WILL BE BLANK 🛑
+        // 🛑 PASTE YOUR KEYS HERE 🛑
         // ============================================================
         const SERVER_URL = "https://blind-bot-server.onrender.com"; 
-        const CLIENT_API_KEY = "a5adece9-2893-495a-ae1a-1ef115145338"; // Your specific client key
+        const CLIENT_API_KEY = "a5adece9-2893-495a-ae1a-1ef115145338"; // Matches your Supabase 'clients' table
 
         // Use the "ey..." key for SUPABASE_KEY
         const SUPABASE_URL = "https://iashgsuvdedpdmytdbgw.supabase.co"; 
@@ -169,10 +164,127 @@
         let history = []; 
         let brandColor = "#007bff"; 
 
-        // 1. BOOT UP: Apply Branding
+        // 1. BOOT UP: Apply Branding (FIXED)
         async function initChat() {
             try {
+                // Fetch settings from Server
                 const response = await fetch(`${SERVER_URL}/init?apiKey=${CLIENT_API_KEY}`);
+                const data = await response.json();
+
+                if (data.error) return console.error("Config Error:", data.error);
+
+                // --- THIS IS THE FIX ---
+                // We ONLY apply settings here. We do NOT try to parse chat replies.
+                
+                // 1. Set Name
+                document.getElementById('brand-name').innerText = data.title;
+                brandColor = data.color;
+
+                // 2. Set Colors
+                document.getElementById('header').style.backgroundColor = brandColor;
+                document.getElementById('send-btn').style.backgroundColor = brandColor;
+                
+                // 3. Dynamic CSS for Bubbles
+                const style = document.createElement('style');
+                style.innerHTML = `.user { background-color: ${brandColor} !important; }`;
+                document.head.appendChild(style);
+
+                // 4. Set Logo
+                if (data.logo) {
+                    const img = document.getElementById('brand-logo');
+                    img.src = data.logo;
+                    img.style.display = 'block';
+                }
+
+            } catch (err) {
+                console.error("Init failed", err);
+            }
+        }
+
+        // 2. IMAGE UPLOAD LOGIC
+        async function uploadImage() {
+            const fileInput = document.getElementById('file-input');
+            const files = fileInput.files; 
+            if (files.length === 0) return;
+
+            document.getElementById('loader').style.display = 'block';
+            document.getElementById('loader').innerText = `Uploading ${files.length} photos...`;
+
+            let messageParts = [];
+            let displayHTML = "";
+
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                const cleanName = file.name.replace(/[^a-zA-Z0-9.]/g, '');
+                const fileName = `uploads/${Date.now()}_${i}_${cleanName}`;
+
+                const { error } = await supabase.storage
+                    .from('chat-uploads')
+                    .upload(fileName, file);
+
+                if (error) {
+                    console.error("Upload failed", error);
+                    continue;
+                }
+
+                const { data: urlData } = supabase.storage
+                    .from('chat-uploads')
+                    .getPublicUrl(fileName);
+                
+                displayHTML += `<img src="${urlData.publicUrl}" class="chat-img">`;
+                messageParts.push({ text: `[IMAGE_URL: ${urlData.publicUrl}]` });
+            }
+
+            document.getElementById('loader').style.display = 'none';
+
+            const box = document.getElementById('chat-box');
+            box.innerHTML += `<div class="user">${displayHTML}</div>`;
+            box.scrollTop = box.scrollHeight;
+
+            history.push({ role: "user", parts: messageParts });
+
+            // Trigger AI Response
+            triggerAIResponse(); 
+        }
+
+        // 3. SEND MESSAGE LOGIC
+        const msgInput = document.getElementById('msg');
+        
+        msgInput.addEventListener('input', function() {
+            this.style.height = 'auto'; 
+            this.style.height = (this.scrollHeight) + 'px'; 
+        });
+
+        msgInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                send();
+            }
+        });
+
+        async function send() {
+            const text = msgInput.value.trim();
+            if (!text) return;
+
+            const box = document.getElementById('chat-box');
+            box.innerHTML += `<div class="user">${text.replace(/\n/g, "<br>")}</div>`;
+            msgInput.value = "";
+            msgInput.style.height = 'auto';
+            box.scrollTop = box.scrollHeight;
+
+            history.push({ role: "user", parts: [{ text: text }] });
+            triggerAIResponse();
+        }
+
+        // 4. COMMON AI CALL
+        async function triggerAIResponse() {
+            const box = document.getElementById('chat-box');
+            try {
+                const response = await fetch(`${SERVER_URL}/chat`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ history: history, clientApiKey: CLIENT_API_KEY })
+                });
                 const data = await response.json();
                 
                 let rawReply = data.reply;
@@ -191,156 +303,6 @@
 
                 let reply = rawReply.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>');
                 box.innerHTML += `<div class="ai">${reply}${renderHtml}</div>`;
-
-                if (data.error) return console.error(data.error);
-
-                // Apply Data
-                document.getElementById('brand-name').innerText = data.title;
-                brandColor = data.color;
-
-                // Apply Colors
-                document.getElementById('header').style.backgroundColor = brandColor;
-                document.getElementById('send-btn').style.backgroundColor = brandColor;
-                
-                const style = document.createElement('style');
-                style.innerHTML = `.user { background-color: ${brandColor} !important; }`;
-                document.head.appendChild(style);
-
-                // Apply Logo
-                if (data.logo) {
-                    const img = document.getElementById('brand-logo');
-                    img.src = data.logo;
-                    img.style.display = 'block';
-                }
-
-            } catch (err) {
-                console.error("Init failed", err);
-            }
-        }
-
-        // 2. IMAGE UPLOAD LOGIC
-        async function uploadImage() {
-            const fileInput = document.getElementById('file-input');
-            const files = fileInput.files; // Get ALL selected files
-            if (files.length === 0) return;
-
-            document.getElementById('loader').style.display = 'block';
-            document.getElementById('loader').innerText = `Uploading ${files.length} photos...`;
-
-            // Prepare the message parts for history
-            let messageParts = [];
-            let displayHTML = "";
-
-            // Loop through every file
-            for (let i = 0; i < files.length; i++) {
-                const file = files[i];
-                const cleanName = file.name.replace(/[^a-zA-Z0-9.]/g, '');
-                const fileName = `uploads/${Date.now()}_${i}_${cleanName}`;
-
-                // Upload
-                const { error } = await supabase.storage
-                    .from('chat-uploads')
-                    .upload(fileName, file);
-
-                if (error) {
-                    console.error("Upload failed for " + file.name);
-                    continue;
-                }
-
-                // Get URL
-                const { data: urlData } = supabase.storage
-                    .from('chat-uploads')
-                    .getPublicUrl(fileName);
-                
-                const publicUrl = urlData.publicUrl;
-
-                // Add to visual stack
-                displayHTML += `<img src="${publicUrl}" class="chat-img">`;
-                
-                // Add to data stack
-                messageParts.push({ text: `[IMAGE_URL: ${publicUrl}]` });
-            }
-
-            document.getElementById('loader').style.display = 'none';
-
-            // Show all images in one bubble
-            const box = document.getElementById('chat-box');
-            box.innerHTML += `
-                <div class="user">
-                    ${displayHTML}
-                </div>
-            `;
-            box.scrollTop = box.scrollHeight;
-
-            // Push to History
-            history.push({ 
-                role: "user", 
-                parts: messageParts 
-            });
-
-            // --- AUTO TRIGGER THE BOT ---
-            // Now we force the bot to look at the photos immediately
-            try {
-                const response = await fetch(`${SERVER_URL}/chat`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ history: history, clientApiKey: CLIENT_API_KEY })
-                });
-                
-                const data = await response.json();
-                let reply = data.reply.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>');
-                
-                box.innerHTML += `<div class="ai">${reply}</div>`;
-                box.scrollTop = box.scrollHeight;
-                history.push({ role: "model", parts: [{ text: data.reply }] });
-
-            } catch (err) {
-                box.innerHTML += `<div class="ai" style="color:#d9534f">I received the photos but couldn't analyze them just yet.</div>`;
-            }
-        }
-
-        // 3. SEND MESSAGE LOGIC (ENTER vs SHIFT+ENTER)
-        const msgInput = document.getElementById('msg');
-        
-        msgInput.addEventListener('input', function() {
-            this.style.height = 'auto'; 
-            this.style.height = (this.scrollHeight) + 'px'; 
-        });
-
-        msgInput.addEventListener('keydown', function(e) {
-            // If Enter is pressed...
-            if (e.key === 'Enter') {
-                // ...and Shift is NOT held down
-                if (!e.shiftKey) {
-                    e.preventDefault(); // Stop new line
-                    send(); // Send message
-                }
-                // If Shift IS held down, do nothing (allow new line)
-            }
-        });
-
-        async function send() {
-            const box = document.getElementById('chat-box');
-            const text = msgInput.value.trim();
-            if (!text) return;
-
-            box.innerHTML += `<div class="user">${text.replace(/\n/g, "<br>")}</div>`;
-            msgInput.value = "";
-            msgInput.style.height = 'auto';
-            box.scrollTop = box.scrollHeight;
-
-            history.push({ role: "user", parts: [{ text: text }] });
-
-            try {
-                const response = await fetch(`${SERVER_URL}/chat`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ history: history, clientApiKey: CLIENT_API_KEY })
-                });
-                const data = await response.json();
-                
-                let reply = data.reply.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>');
-                box.innerHTML += `<div class="ai">${reply}</div>`;
                 box.scrollTop = box.scrollHeight;
                 history.push({ role: "model", parts: [{ text: data.reply }] });
 
@@ -349,7 +311,7 @@
             }
         }
 
-        // Start App
+        // Start
         initChat();
 
     </script>
