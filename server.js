@@ -30,7 +30,7 @@ async function urlToGenerativePart(url) {
     }
 }
 
-// --- HELPER: GENERATE RENDERING (Stability AI - SDXL) ---
+// --- HELPER: PAINT THE WINDOW (Stability AI) ---
 async function generateRendering(imageUrl, stylePrompt) {
     try {
         console.log("🎨 Painting:", stylePrompt);
@@ -40,13 +40,13 @@ async function generateRendering(imageUrl, stylePrompt) {
         const payload = new FormData();
         payload.append('init_image', buffer);
         payload.append('init_image_mode', 'IMAGE_STRENGTH');
-        payload.append('image_strength', 0.35); // Keep 65% of original room
+        payload.append('image_strength', 0.35); 
         payload.append('text_prompts[0][text]', `${stylePrompt}, interior design photography, 8k, realistic, high quality`);
         payload.append('text_prompts[0][weight]', 1);
         payload.append('cfg_scale', 7);
         payload.append('steps', 30);
 
-        // Using SDXL 1.0 (Cheaper and better for architecture)
+        // Using SDXL 1.0 (Cheaper)
         const response = await axios.post(
             'https://api.stability.ai/v1/generation/stable-diffusion-xl-1024-v1-0/image-to-image',
             payload,
@@ -80,14 +80,14 @@ You are a senior sales agent for "The Window Valet".
 GOAL: Secure a lead by getting the customer's CONTACT INFO and a HOME VISIT TIME.
 
 RULES:
-1. **Memory:** REMEMBER what the user told you earlier (Name, Room, Issues). Do not ask for things they already said.
+1. **Memory:** REMEMBER what the user told you earlier.
 2. **The Home Visit:** Try to schedule a "Free In-Home Estimate."
 3. **Contact Info:** You MUST get their Name AND (Phone OR Email). 
 4. **Validation:** If they give a time but no contact info, keep asking.
 
 TOOLS:
 - You can GENERATE RENDERINGS. If user uploads a photo and asks to see a product, set "visualize": true.
-- In "visual_style", describe the NEW product clearly (e.g. "modern white zebra blinds, luxury style").
+- In "visual_style", describe the NEW product clearly.
 
 OUTPUT FORMAT (JSON ONLY):
 {
@@ -120,8 +120,6 @@ app.get('/init', async (req, res) => {
 app.post('/chat', async (req, res) => {
     try {
         const { history, clientApiKey } = req.body;
-        
-        // 1. Get Client & Check Status
         const { data: client } = await supabase.from('clients').select('*').eq('api_key', clientApiKey).single();
         if (!client || client.status !== 'active') return res.json({ reply: "Service Suspended." });
 
@@ -131,13 +129,13 @@ app.post('/chat', async (req, res) => {
             generationConfig: { responseMimeType: "application/json" }
         });
 
-        // 2. MEMORY FIX: Split History
-        const lastTurn = history.pop(); 
+        // 1. Separate History (Memory) from Current Turn
+        const lastTurn = history.pop();
         const pastHistory = history;
 
         const chat = model.startChat({ history: pastHistory });
 
-        // 3. Image Parsing
+        // 2. Prepare Current Message (Handle Images)
         let currentParts = [];
         let foundImage = false;
         let sourceImageUrl = null;
@@ -158,16 +156,15 @@ app.post('/chat', async (req, res) => {
             currentParts.push({ text: "I have uploaded photos. Please analyze them." });
         }
 
-        // 4. Generate AI Response
+        // 3. Generate Content
         const result = await chat.sendMessage(currentParts);
         const cleanText = result.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
         const jsonResponse = JSON.parse(cleanText);
 
-        // 5. VISUALIZATION LOGIC (WITH CREDIT CHECK)
+        // 4. Visualization Logic (With Credit Check)
         if (jsonResponse.visualize === true) {
-            
-            // If no image in this turn, look back in history
             if (!sourceImageUrl) {
+                 // Scan backward for image
                  for (let i = pastHistory.length - 1; i >= 0; i--) {
                     const parts = pastHistory[i].parts;
                     for (const part of parts) {
@@ -179,40 +176,25 @@ app.post('/chat', async (req, res) => {
             }
 
             if (sourceImageUrl) {
-                // --- THE CREDIT CHECK ---
-                // We re-fetch credits to be safe
-                const { data: wallet } = await supabase.from('clients').select('image_credits').eq('id', client.id).single();
+                // Check Credits
+                const { data: creditCheck } = await supabase.from('clients').select('image_credits').eq('id', client.id).single();
                 
-                if (!wallet || wallet.image_credits < 1) {
-                    jsonResponse.reply += " (I'd love to generate a preview, but your account is out of Image Credits. Please contact support to top up!)";
+                if (!creditCheck || creditCheck.image_credits < 1) {
+                    jsonResponse.reply += " (I'd love to generate a preview, but your account is out of Image Credits. Please contact support!)";
                 } else {
-                    // CHARGE THE WALLET (-1)
-                    await supabase.from('clients')
-                        .update({ image_credits: wallet.image_credits - 1 })
-                        .eq('id', client.id);
-
-                    // LOG THE TRANSACTION
-                    await supabase.from('credit_usage').insert({ 
-                        client_id: client.id, 
-                        credits_spent: 1, 
-                        action_type: 'rendering' 
-                    });
+                    // Deduct
+                    await supabase.from('clients').update({ image_credits: creditCheck.image_credits - 1 }).eq('id', client.id);
+                    await supabase.from('credit_usage').insert({ client_id: client.id, credits_spent: 1, action_type: 'rendering' });
                     
-                    // DO THE WORK
+                    // Paint
                     const renderedUrl = await generateRendering(sourceImageUrl, jsonResponse.visual_style);
-                    if (renderedUrl) {
-                        jsonResponse.reply += `\n\n[RENDER_URL: ${renderedUrl}]`;
-                    } else {
-                        // Optional: Refund if failed? For MVP, we keep it simple.
-                        jsonResponse.reply += " (Preview generation failed. Please try again.)";
-                    }
+                    if (renderedUrl) jsonResponse.reply += `\n\n[RENDER_URL: ${renderedUrl}]`;
                 }
             }
         }
 
-        // 6. Lead Capture Logic
+        // 5. Lead Capture
         if (jsonResponse.lead_captured && (jsonResponse.customer_phone || jsonResponse.customer_email)) {
-            console.log("🔥 SAVING LEAD:", jsonResponse.customer_name);
             await supabase.from('leads').insert({
                 client_id: client.id,
                 customer_name: jsonResponse.customer_name,
@@ -234,4 +216,4 @@ app.post('/chat', async (req, res) => {
     }
 });
 
-app.listen(3000, () => console.log('🚀 Super Agent + Credits Running'));
+app.listen(3000, () => console.log('🚀 Final SaaS Server Running'));
