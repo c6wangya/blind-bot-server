@@ -111,7 +111,7 @@ async function createEmbedding(text) {
     return result.embedding.values;
 }
 
-// --- NEW HELPER: GENERATE PERSONA ---
+// --- UPDATED HELPER: GENERATE PERSONA (Now with Fact Extraction) ---
 async function generatePersonaFromText(companyName, fullText) {
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
     const prompt = `
@@ -120,13 +120,19 @@ async function generatePersonaFromText(companyName, fullText) {
     TRAINING MATERIAL:
     "${fullText.substring(0, 50000)}" 
     
-    TASK: Write a SYSTEM PROMPT for an AI Sales Agent representing this company.
-    1. Define the Agent's Role (Friendly, Professional, Expert).
-    2. Define the exact services they offer based on the text.
-    3. Extract Key Selling Points (Warranty, History, Guarantees).
-    4. Set the Goal: Answer questions first, then schedule an appointment.
+    TASK: Write a SYSTEM PROMPT for an AI Sales Agent.
     
-    OUTPUT: A single paragraph of instructions addressed to the AI. Do NOT use JSON. Just text.
+    CRITICAL INSTRUCTION: You must EXTRACT specific "Hard Facts" verbatim.
+    - If the text mentions a specific warranty (e.g., "Lifetime", "25 years"), YOU MUST INCLUDE IT.
+    - If the text mentions a price guarantee (e.g., "10x10", "Low Price Guarantee"), YOU MUST INCLUDE IT.
+    
+    STRUCTURE THE PERSONA AS FOLLOWS:
+    1. **Identity:** Who you are (Tone: Friendly, Local Expert).
+    2. **The "Hard Facts" (Scripture):** List the exact Warranties and Guarantees found in the text.
+    3. **Services:** What do they sell?
+    4. **Goal:** Answer questions using the "Hard Facts" first, then schedule an appointment.
+    
+    OUTPUT: A single block of text instructions for the AI.
     `;
     
     const result = await model.generateContent(prompt);
