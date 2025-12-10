@@ -79,30 +79,67 @@ async function smartResize(buffer) {
     return await sharp(buffer).resize(bestMatch.w, bestMatch.h, { fit: 'cover' }).toBuffer();
 }
 
+// --- UPDATED HELPER: GENERATE RENDERING (High Quality & Closed Blinds) ---
 async function generateRendering(imageUrl, stylePrompt) {
     try {
+        console.log("🎨 Downloading original image...");
         const imageResponse = await axios.get(imageUrl, { responseType: 'arraybuffer' });
-        let buffer = await smartResize(Buffer.from(imageResponse.data));
+        let buffer = Buffer.from(imageResponse.data);
 
+        // USE SMART RESIZE HERE
+        buffer = await smartResize(buffer);
+
+        console.log("🎨 Sending to Stability API (High Quality Mode)...");
         const payload = new FormData();
         payload.append('init_image', buffer, { filename: 'source.jpg', contentType: 'image/jpeg' });
         payload.append('init_image_mode', 'IMAGE_STRENGTH');
-        payload.append('image_strength', 0.35);
-        payload.append('text_prompts[0][text]', `${stylePrompt}, interior design photography, 8k, realistic`);
-        payload.append('cfg_scale', 7);
-        payload.append('steps', 30);
+        
+        // 0.35 means "Keep 65% of the room structure, let AI change 35% (the texture/blinds)"
+        payload.append('image_strength', 0.35); 
+
+        // POSITIVE PROMPT: Force "Fully Closed" and "High Quality"
+        const fullPrompt = `${stylePrompt}, fully closed, covering the entire window, blinds lowered all the way down, privacy mode, interior design photography, 8k, highly detailed, architectural digest style, professional lighting`;
+        payload.append('text_prompts[0][text]', fullPrompt);
+        payload.append('text_prompts[0][weight]', 1);
+
+        // NEGATIVE PROMPT: Explicitly forbid "Open" blinds
+        payload.append('text_prompts[1][text]', 'open blinds, half open, raised blinds, view through window, messy, blurry, distorted, low quality, watermark, text, crooked lines');
+        payload.append('text_prompts[1][weight]', -1);
+
+        payload.append('cfg_scale', 8); // Slightly higher adherence to the prompt
+        payload.append('steps', 50);    // Increased from 30 to 50 for sharper details
 
         const response = await axios.post(
             'https://api.stability.ai/v1/generation/stable-diffusion-xl-1024-v1-0/image-to-image',
             payload,
-            { headers: { ...payload.getHeaders(), Authorization: `Bearer ${process.env.STABILITY_API_KEY}`, Accept: 'application/json' } }
+            {
+                headers: {
+                    ...payload.getHeaders(),
+                    Authorization: `Bearer ${process.env.STABILITY_API_KEY}`,
+                    Accept: 'application/json',
+                },
+            }
         );
 
+        console.log("🎨 Stability Success! Saving result...");
+        const base64Image = response.data.artifacts[0].base64;
+        const imageBuffer = Buffer.from(base64Image, 'base64');
         const fileName = `renderings/${Date.now()}_ai.png`;
-        const { error } = await supabase.storage.from('chat-uploads').upload(fileName, Buffer.from(response.data.artifacts[0].base64, 'base64'), { contentType: 'image/png' });
+
+        const { error } = await supabase.storage.from('chat-uploads').upload(fileName, imageBuffer, { contentType: 'image/png' });
         if (error) throw error;
-        return supabase.storage.from('chat-uploads').getPublicUrl(fileName).data.publicUrl;
-    } catch (e) { return null; }
+
+        const { data: urlData } = supabase.storage.from('chat-uploads').getPublicUrl(fileName);
+        return urlData.publicUrl;
+
+    } catch (error) {
+        if (error.response) {
+            console.error("❌ Stability API Error:", error.response.status, JSON.stringify(error.response.data));
+        } else {
+            console.error("❌ Internal Rendering Error:", error.message);
+        }
+        return null;
+    }
 }
 
 async function createEmbedding(text) {
