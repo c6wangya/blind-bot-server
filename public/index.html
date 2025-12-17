@@ -307,38 +307,24 @@ if (box.innerHTML.trim() === "") {
         triggerAIResponse();
     }
 
-    // ============================================================
     // 5. AI CALL
     // ============================================================
-    async function triggerAIResponse() {
+   async function triggerAIResponse() {
         const box = document.getElementById('chat-box');
         try {
+            // 1. Send the request
             const response = await fetch(`${SERVER_URL}/chat`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ history: history, clientApiKey: CLIENT_API_KEY })
             });
             const data = await response.json();
-            // ... inside triggerAIResponse ...
-            
-            let reply = rawReply.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>');
-            
-            // NEW: Check for Buttons (Options)
-            let buttonsHtml = "";
-            if (data.options && Array.isArray(data.options) && data.options.length > 0) {
-                buttonsHtml = `<div class="options-container">`;
-                data.options.forEach(opt => {
-                    // When clicked, it sends the text of the button as a user message
-                    buttonsHtml += `<button class="option-btn" onclick="sendOption('${opt}')">${opt}</button>`;
-                });
-                buttonsHtml += `</div>`;
-            }
 
-            box.innerHTML += `<div class="ai">${reply}${renderHtml}${buttonsHtml}</div>`;
-            // ...
+            // 2. Process the raw text
             let rawReply = data.reply;
             let renderHtml = "";
 
+            // 3. Extract Render URL if present
             const renderMatch = rawReply.match(/\[RENDER_URL: (.*?)\]/);
             if (renderMatch) {
                 const url = renderMatch[1];
@@ -349,12 +335,29 @@ if (box.innerHTML.trim() === "") {
                 </div>`;
             }
 
+            // 4. Format Bold Text
             let reply = rawReply.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>');
-            box.innerHTML += `<div class="ai">${reply}${renderHtml}</div>`;
+            
+            // 5. Check for Buttons (Options)
+            let buttonsHtml = "";
+            if (data.options && Array.isArray(data.options) && data.options.length > 0) {
+                buttonsHtml = `<div class="options-container">`;
+                data.options.forEach(opt => {
+                    // When clicked, it sends the text of the button as a user message
+                    buttonsHtml += `<button class="option-btn" onclick="sendOption('${opt}')">${opt}</button>`;
+                });
+                buttonsHtml += `</div>`;
+            }
+
+            // 6. Update HTML
+            box.innerHTML += `<div class="ai">${reply}${renderHtml}${buttonsHtml}</div>`;
             box.scrollTop = box.scrollHeight;
+            
+            // 7. Update History
             history.push({ role: "model", parts: [{ text: data.reply }] });
 
         } catch (err) {
+            console.error("Chat Error:", err);
             box.innerHTML += `<div class="ai" style="color:#d9534f">Connection Error</div>`;
         }
     }
