@@ -7,367 +7,158 @@
     
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; display: flex; flex-direction: column; height: 100vh; background: transparent; }
-        .option-btn {
-    background: white;
-    border: 1px solid #333;
-    color: #333;
-    padding: 8px 12px;
-    border-radius: 20px;
-    margin: 5px 5px 0 0;
-    cursor: pointer;
-    font-size: 13px;
-    transition: all 0.2s;
-}
-.option-btn:hover {
-    background: #333;
-    color: white;
-}
-.options-container {
-    margin-top: 8px;
-    display: flex;
-    flex-wrap: wrap;
-}
-        #chat-container { 
-            background: white; 
-            display: flex; 
-            flex-direction: column; 
-            height: 100vh; 
-            overflow: hidden;
-            box-shadow: 0 0 15px rgba(0,0,0,0.1);
-        }
         
-        /* HEADER */
-        #header { 
-            padding: 15px; 
-            background: #333; 
-            color: white; 
-            display: flex; 
-            align-items: center; 
-            gap: 12px; 
-            font-weight: 600; 
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-        }
-        #brand-logo { 
-            width: 32px; height: 32px; 
-            background: white; 
-            border-radius: 50%; 
-            padding: 2px; 
-            object-fit: contain;
-            display: none; 
-        }
-        
-        /* CHAT AREA */
-        #chat-box { 
-            flex: 1; 
-            padding: 20px; 
-            overflow-y: auto; 
-            background: #f8f9fa; 
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-        }
+        #chat-container { background: white; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+        #chat-box { flex: 1; padding: 20px; overflow-y: auto; background: #f8f9fa; display: flex; flex-direction: column; gap: 12px; }
         
         /* BUBBLES */
-        .user { 
-            background: #333; 
-            color: white; 
-            padding: 12px 16px; 
-            border-radius: 18px 18px 0 18px; 
-            align-self: flex-end; 
-            max-width: 80%; 
-            word-wrap: break-word;
-            font-size: 14px;
+        .user { background: #333; color: white; padding: 12px 16px; border-radius: 18px 18px 0 18px; align-self: flex-end; max-width: 80%; }
+        .ai { background: #e9ecef; color: #2d3436; padding: 12px 16px; border-radius: 18px 18px 18px 0; align-self: flex-start; max-width: 80%; }
+        .chat-img { max-width: 200px; border-radius: 12px; margin-top: 8px; display: block; border: 2px solid rgba(255,255,255,0.3); }
+
+        /* PREVIEW AREA */
+        #preview-container { display: flex; gap: 10px; padding: 0 15px; background: white; transition: all 0.2s; }
+        .preview-thumb { width: 60px; height: 60px; border-radius: 8px; object-fit: cover; border: 2px solid #ddd; }
+        .preview-wrapper { position: relative; margin-top: 10px; }
+        .remove-btn { position: absolute; top: -5px; right: -5px; background: red; color: white; border-radius: 50%; width: 18px; height: 18px; font-size: 12px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+
+        /* NEW: PRODUCT CARD CAROUSEL */
+        .product-carousel {
+            display: flex; gap: 10px; overflow-x: auto; padding: 10px 0;
+            scrollbar-width: none; /* Hide scrollbar Firefox */
         }
-        .ai { 
-            background: #e9ecef; 
-            color: #2d3436; 
-            padding: 12px 16px; 
-            border-radius: 18px 18px 18px 0; 
-            align-self: flex-start; 
-            max-width: 80%; 
-            word-wrap: break-word;
-            font-size: 14px;
-            line-height: 1.5;
-        }
+        .product-carousel::-webkit-scrollbar { display: none; } /* Hide scrollbar Chrome */
         
-        /* IMAGES */
-        .chat-img { 
-            max-width: 200px; 
-            border-radius: 12px; 
-            margin-top: 8px; 
-            display: block; 
-            border: 2px solid rgba(255,255,255,0.3);
+        .product-card {
+            min-width: 140px; width: 140px;
+            background: white; border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            overflow: hidden; cursor: pointer;
+            transition: transform 0.2s;
+            border: 1px solid #eee;
         }
+        .product-card:hover { transform: translateY(-3px); border-color: #333; }
+        .product-card img { width: 100%; height: 100px; object-fit: cover; }
+        .product-card span { display: block; padding: 8px; font-size: 12px; font-weight: 600; text-align: center; color: #333; }
 
         /* CONTROLS */
-        .controls { 
-            display: flex; 
-            gap: 10px; 
-            align-items: flex-end; 
-            padding: 15px; 
-            border-top: 1px solid #eee; 
-            background: white;
-        }
-        
-        textarea { 
-            flex: 1; 
-            padding: 12px 15px; 
-            border: 1px solid #e0e0e0; 
-            border-radius: 24px; 
-            outline: none; 
-            resize: none; 
-            font-family: inherit; 
-            max-height: 120px;
-            font-size: 14px;
-            overflow: hidden;
-        }
-        textarea:focus { border-color: #bbb; }
-        
-        .btn { 
-            height: 42px; 
-            border: none; 
-            border-radius: 24px; 
-            cursor: pointer; 
-            font-weight: 600; 
-            color: white; 
-            background: #333; 
-            padding: 0 20px;
-        }
-        
-        #upload-label {
-            width: 42px; height: 42px; 
-            background: #f1f3f5; border-radius: 50%; 
-            display: flex; align-items: center; justify-content: center; 
-            cursor: pointer; font-size: 18px; color: #555;
-        }
-        #upload-label:hover { background: #e9ecef; }
+        .controls { display: flex; gap: 10px; align-items: flex-end; padding: 15px; border-top: 1px solid #eee; background: white; }
+        textarea { flex: 1; padding: 12px 15px; border: 1px solid #e0e0e0; border-radius: 24px; outline: none; resize: none; font-family: inherit; max-height: 120px; font-size: 14px; }
+        .btn { height: 42px; border: none; border-radius: 24px; cursor: pointer; font-weight: 600; color: white; background: #333; padding: 0 20px; }
+        #upload-label { width: 42px; height: 42px; background: #f1f3f5; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 18px; color: #555; }
         #file-input { display: none; }
-        
         #loader { display: none; text-align: center; font-size: 11px; color: #888; padding: 5px; }
     </style>
 </head>
 <body>
 
     <div id="chat-container">
-        <div id="header">
-            <img id="brand-logo" src="" alt="">
-            <span id="brand-name">Chat Assistant</span>
-        </div>
-
+        <div id="header" style="padding:15px; background:#333; color:white; font-weight:600;">Chat Assistant</div>
         <div id="chat-box"></div>
         <div id="loader">Uploading image...</div>
+        <div id="preview-container"></div>
 
         <div class="controls">
             <label id="upload-label" for="file-input">📎</label>
-            <input type="file" id="file-input" accept="image/*" multiple onchange="uploadImage()">
+            <input type="file" id="file-input" accept="image/*" onchange="uploadImage()">
             <textarea id="msg" placeholder="Type a message..." rows="1"></textarea>
             <button id="send-btn" class="btn" onclick="send()">Send</button>
         </div>
     </div>
 
    <script>
-    // ============================================================
-    // 1. CONFIGURATION
-    // ============================================================
-    
     const urlParams = new URLSearchParams(window.location.search);
-    const urlKey = urlParams.get('apiKey');
-
-    // Use the URL key if present (Softr Preview), otherwise fallback to test key
-    const CLIENT_API_KEY = urlKey || "YOUR_FALLBACK_TEST_KEY"; 
-    
-    // Empty string means "Talk to the same server that hosted this file"
+    const CLIENT_API_KEY = urlParams.get('apiKey') || "YOUR_FALLBACK_TEST_KEY"; 
     const SERVER_URL = "https://blind-bot-server.onrender.com"; 
-
-    // Initialize Supabase
-    const SUPABASE_URL = "https://iashgsuvdedpdmytdbgw.supabase.co"; 
-    const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imlhc2hnc3V2ZGVkcGRteXRkYmd3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ0ODMyNDIsImV4cCI6MjA4MDA1OTI0Mn0.nUyhba86frTJDqqAEfZnjF4s_5sTnda7TjIoKDo2wbc"; 
-    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    const supabase = window.supabase.createClient("https://iashgsuvdedpdmytdbgw.supabase.co", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imlhc2hnc3V2ZGVkcGRteXRkYmd3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ0ODMyNDIsImV4cCI6MjA4MDA1OTI0Mn0.nUyhba86frTJDqqAEfZnjF4s_5sTnda7TjIoKDo2wbc");
 
     let history = []; 
-    let brandColor = "#007bff"; 
+    let stagedImages = []; 
 
-    // ============================================================
-    // 2. BOOT UP: Apply Branding & SIZE
-    // ============================================================
-    async function initChat() {
-        try {
-            const response = await fetch(`${SERVER_URL}/init?apiKey=${CLIENT_API_KEY}`);
-            const data = await response.json();
+    // Init Logic (Keep your previous init logic here)
 
-            if (data.error) return console.error("Config Error:", data.error);
-
-            // 1. Set Texts
-            document.getElementById('brand-name').innerText = data.title;
-            brandColor = data.color;
-
-            // 2. Set Colors
-            document.getElementById('header').style.backgroundColor = brandColor;
-            document.getElementById('send-btn').style.backgroundColor = brandColor;
-            
-            // 3. Dynamic CSS for User Bubbles
-            const style = document.createElement('style');
-            style.innerHTML = `.user { background-color: ${brandColor} !important; }`;
-            document.head.appendChild(style);
-
-            // 4. Set Logo
-            if (data.logo) {
-                const img = document.getElementById('brand-logo');
-                img.src = data.logo;
-                img.style.display = 'block';
-            }
-
-            // 5. CRITICAL: Set Size for iframe preview
-            // This ensures it looks like a phone app inside the Softr box
-            const container = document.getElementById('chat-container');
-            // If the server sends specific dimensions, use them, otherwise 100%
-            if (data.width) container.style.maxWidth = "100%"; 
-            // ... inside initChat(), after data.width setting ...
-
-// 6. NEW: Auto-Greeting
-const greeting = `Hello! What can ${data.name} do for you today?`;
-
-// Only add if the chat box is empty
-const box = document.getElementById('chat-box');
-if (box.innerHTML.trim() === "") {
-    box.innerHTML += `<div class="ai">${greeting}</div>`;
-    // Add to history so the AI knows it already said hello
-    history.push({ role: "model", parts: [{ text: greeting }] });
-}
-        } catch (err) {
-            console.error("Init failed", err);
-        }
-    }
-
-    // ============================================================
-    // 3. IMAGE UPLOAD LOGIC
-    // ============================================================
+    // Upload Logic (Keep your previous uploadImage logic here)
     async function uploadImage() {
         const fileInput = document.getElementById('file-input');
-        const files = fileInput.files; 
-        if (files.length === 0) return;
+        const file = fileInput.files[0];
+        if (!file) return;
 
         document.getElementById('loader').style.display = 'block';
-        document.getElementById('loader').innerText = `Uploading ${files.length} photos...`;
-
-        let messageParts = [];
-        let displayHTML = "";
-
-        for (let i = 0; i < files.length; i++) {
-            const file = files[i];
-            const cleanName = file.name.replace(/[^a-zA-Z0-9.]/g, '');
-            const fileName = `uploads/${Date.now()}_${i}_${cleanName}`;
-
-            const { error } = await supabase.storage.from('chat-uploads').upload(fileName, file);
-
-            if (error) { console.error("Upload failed", error); continue; }
-
-            const { data: urlData } = supabase.storage.from('chat-uploads').getPublicUrl(fileName);
-            
-            displayHTML += `<img src="${urlData.publicUrl}" class="chat-img">`;
-            messageParts.push({ text: `[IMAGE_URL: ${urlData.publicUrl}]` });
-        }
-
+        const fileName = `uploads/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.]/g, '')}`;
+        await supabase.storage.from('chat-uploads').upload(fileName, file);
+        const { data } = supabase.storage.from('chat-uploads').getPublicUrl(fileName);
+        
+        stagedImages.push(data.publicUrl);
+        document.getElementById('preview-container').innerHTML += `<div class="preview-wrapper"><img src="${data.publicUrl}" class="preview-thumb"></div>`;
         document.getElementById('loader').style.display = 'none';
-        const box = document.getElementById('chat-box');
-        box.innerHTML += `<div class="user">${displayHTML}</div>`;
-        box.scrollTop = box.scrollHeight;
-        history.push({ role: "user", parts: messageParts });
-        triggerAIResponse(); 
     }
 
-    // ============================================================
-    // 4. SEND MESSAGE LOGIC
-    // ============================================================
-    const msgInput = document.getElementById('msg');
-    
-    msgInput.addEventListener('input', function() {
-        this.style.height = 'auto'; 
-        this.style.height = (this.scrollHeight) + 'px'; 
-    });
-
-    msgInput.addEventListener('keydown', function(e) {
-        if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            send();
-        }
-    });
-
-    async function send() {
-        const text = msgInput.value.trim();
-        if (!text) return;
+    // Send Logic
+    async function send(overrideText = null) {
+        const text = overrideText || document.getElementById('msg').value.trim();
+        if (!text && stagedImages.length === 0) return;
 
         const box = document.getElementById('chat-box');
-        box.innerHTML += `<div class="user">${text.replace(/\n/g, "<br>")}</div>`;
-        msgInput.value = "";
-        msgInput.style.height = 'auto';
-        box.scrollTop = box.scrollHeight;
+        
+        let displayHtml = "";
+        stagedImages.forEach(url => displayHtml += `<img src="${url}" class="chat-img">`);
+        if (text) displayHtml += `<div>${text}</div>`;
+        
+        box.innerHTML += `<div class="user">${displayHtml}</div>`;
+        
+        let backendText = text;
+        stagedImages.forEach(url => backendText += ` [IMAGE_URL: ${url}]`);
+        history.push({ role: "user", parts: [{ text: backendText }] });
 
-        history.push({ role: "user", parts: [{ text: text }] });
+        document.getElementById('msg').value = "";
+        stagedImages = []; // Clear staged after sending
+        document.getElementById('preview-container').innerHTML = "";
+        
         triggerAIResponse();
     }
 
-    // 5. AI CALL
-    // ============================================================
-   async function triggerAIResponse() {
+    async function triggerAIResponse() {
         const box = document.getElementById('chat-box');
+        const loader = document.createElement('div'); loader.className='ai'; loader.innerText='...'; loader.id='temp-loader';
+        box.appendChild(loader);
+
         try {
-            // 1. Send the request
             const response = await fetch(`${SERVER_URL}/chat`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ history: history, clientApiKey: CLIENT_API_KEY })
+                body: JSON.stringify({ history, clientApiKey: CLIENT_API_KEY })
             });
             const data = await response.json();
+            document.getElementById('temp-loader').remove();
 
-            // 2. Process the raw text
-            let rawReply = data.reply;
-            let renderHtml = "";
-
-            // 3. Extract Render URL if present
-            const renderMatch = rawReply.match(/\[RENDER_URL: (.*?)\]/);
-            if (renderMatch) {
-                const url = renderMatch[1];
-                rawReply = rawReply.replace(renderMatch[0], ""); 
-                renderHtml = `<div style="margin-top:10px; border:2px solid #28a745; border-radius:10px; overflow:hidden;">
-                    <div style="background:#28a745; color:white; padding:5px; font-size:12px; font-weight:bold;">✨ AI Preview</div>
-                    <img src="${url}" class="chat-img" style="border:none; margin:0;">
-                </div>`;
-            }
-
-            // 4. Format Bold Text
-            let reply = rawReply.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>');
+            // 1. Text Reply
+            let replyHtml = data.reply.replace(/\[RENDER_URL: (.*?)\]/, (match, url) => {
+                return `<img src="${url}" class="chat-img" style="border: 2px solid #28a745;">`;
+            });
             
-            // 5. Check for Buttons (Options)
-            let buttonsHtml = "";
-            if (data.options && Array.isArray(data.options) && data.options.length > 0) {
-                buttonsHtml = `<div class="options-container">`;
-                data.options.forEach(opt => {
-                    // When clicked, it sends the text of the button as a user message
-                    buttonsHtml += `<button class="option-btn" onclick="sendOption('${opt}')">${opt}</button>`;
+            // 2. PRODUCT CARDS (NEW)
+            let cardsHtml = "";
+            if (data.product_suggestions && data.product_suggestions.length > 0) {
+                cardsHtml = `<div class="product-carousel">`;
+                data.product_suggestions.forEach(prod => {
+                    // Click sends the product name as a message
+                    cardsHtml += `
+                    <div class="product-card" onclick="send('${prod.name}')">
+                        <img src="${prod.image}">
+                        <span>${prod.name}</span>
+                    </div>`;
                 });
-                buttonsHtml += `</div>`;
+                cardsHtml += `</div>`;
             }
 
-            // 6. Update HTML
-            box.innerHTML += `<div class="ai">${reply}${renderHtml}${buttonsHtml}</div>`;
-            box.scrollTop = box.scrollHeight;
-            
-            // 7. Update History
+            box.innerHTML += `<div class="ai">${replyHtml}${cardsHtml}</div>`;
             history.push({ role: "model", parts: [{ text: data.reply }] });
+            box.scrollTop = box.scrollHeight;
 
         } catch (err) {
-            console.error("Chat Error:", err);
-            box.innerHTML += `<div class="ai" style="color:#d9534f">Connection Error</div>`;
+            console.error(err);
         }
     }
-function sendOption(text) {
-        const msgInput = document.getElementById('msg');
-        msgInput.value = text; // Put text in box
-        send(); // Auto send
-    }
-    // Start
-    initChat();
-</script>
+   </script>
 </body>
 </html>
