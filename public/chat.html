@@ -70,7 +70,7 @@
     const urlParams = new URLSearchParams(window.location.search);
     const CLIENT_API_KEY = urlParams.get('apiKey') || "YOUR_FALLBACK_TEST_KEY"; 
     const SERVER_URL = "https://blind-bot-server.onrender.com"; 
-    const supabase = window.supabase.createClient("https://iashgsuvdedpdmytdbgw.supabase.co", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imlhc2hnc3V2ZGVkcGRteXRkYmd3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ0ODMyNDIsImV4cCI6MjA4MDA1OTI0Mn0.nUyhba86frTJDqqAEfZnjF4s_5sTnda7TjIoKDo2wbc");
+    const supabaseclients = window.supabase.createClient("https://iashgsuvdedpdmytdbgw.supabase.co", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imlhc2hnc3V2ZGVkcGRteXRkYmd3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ0ODMyNDIsImV4cCI6MjA4MDA1OTI0Mn0.nUyhba86frTJDqqAEfZnjF4s_5sTnda7TjIoKDo2wbc");
 
     let history = []; 
     let stagedImages = []; 
@@ -85,8 +85,8 @@
 
         document.getElementById('loader').style.display = 'block';
         const fileName = `uploads/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.]/g, '')}`;
-        await supabase.storage.from('chat-uploads').upload(fileName, file);
-        const { data } = supabase.storage.from('chat-uploads').getPublicUrl(fileName);
+        await supabaseclients.storage.from('chat-uploads').upload(fileName, file);
+        const { data } = supabaseclients.storage.from('chat-uploads').getPublicUrl(fileName);
         
         stagedImages.push(data.publicUrl);
         document.getElementById('preview-container').innerHTML += `<div class="preview-wrapper"><img src="${data.publicUrl}" class="preview-thumb"></div>`;
