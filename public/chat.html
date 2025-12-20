@@ -74,8 +74,31 @@
 
     let history = []; 
     let stagedImages = []; 
+    const urlParams = new URLSearchParams(window.location.search);
+    const CLIENT_API_KEY = urlParams.get('apiKey') || "YOUR_FALLBACK_TEST_KEY"; 
+    
+    // --- UPDATED: THEME & LOGO LOGIC ---
+    const themeColor = urlParams.get('theme') || "#333";
+    const logoUrl = urlParams.get('logo'); // Get the logo URL
 
-    // Init Logic (Keep your previous init logic here)
+    // 1. Apply Color
+    const header = document.getElementById('header');
+    header.style.backgroundColor = themeColor;
+    document.getElementById('send-btn').style.backgroundColor = themeColor;
+    
+    // 2. Apply Logo (If it exists)
+    if (logoUrl && logoUrl !== "null" && logoUrl !== "") {
+        // Clear text and add image
+        header.innerHTML = `<img src="${logoUrl}" style="height: 30px; vertical-align: middle;">`;
+    }
+
+    // 3. Dynamic CSS
+    const styleSheet = document.createElement("style");
+    styleSheet.innerText = `
+        .user { background: ${themeColor} !important; }
+        .product-card:hover { border-color: ${themeColor} !important; }
+    `;
+    document.head.appendChild(styleSheet);
 
     // Upload Logic (Keep your previous uploadImage logic here)
     async function uploadImage() {

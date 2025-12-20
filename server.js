@@ -132,7 +132,34 @@ setInterval(checkAndFixDescriptions, 30000);
 // Run once immediately on startup
 checkAndFixDescriptions();
 
+// ==================================================================
+// 4. NEW: CLIENT CONFIG ENDPOINT
+// ==================================================================
+app.get('/client-config/:apiKey', async (req, res) => {
+    try {
+        const { apiKey } = req.params;
+        const { data: client, error } = await supabase
+            .from('clients')
+            .select('primary_color, logo_url, company_name') // ⚠️ Make sure these column names match your Supabase table
+            .eq('api_key', apiKey)
+            .single();
 
+        if (error || !client) {
+            return res.status(404).json({ error: "Client not found" });
+        }
+
+        // Return the customization settings
+        res.json({
+            color: client.primary_color || "#333333", // Fallback color
+            logo: client.logo_url || "",
+            name: client.company_name
+        });
+
+    } catch (err) {
+        console.error("Config Error:", err);
+        res.status(500).json({ error: "Server Error" });
+    }
+});
 // ==================================================================
 // 3. CHAT ENDPOINT (Unchanged)
 // ==================================================================
