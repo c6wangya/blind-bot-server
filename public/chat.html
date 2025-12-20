@@ -74,9 +74,7 @@
 
     let history = []; 
     let stagedImages = []; 
-    const urlParams = new URLSearchParams(window.location.search);
-    const CLIENT_API_KEY = urlParams.get('apiKey') || "YOUR_FALLBACK_TEST_KEY"; 
-    
+        
     // --- UPDATED: THEME & LOGO LOGIC ---
     const themeColor = urlParams.get('theme') || "#333";
     const logoUrl = urlParams.get('logo'); // Get the logo URL
