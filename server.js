@@ -9,6 +9,8 @@ import sharp from 'sharp';
 import { createRequire } from 'module'; 
 import { TaskType } from "@google/generative-ai";
 import { startPersonaWorker } from './persona_worker.js'; 
+import { validateClientAccess } from './subscription_manager.js';
+import { startProductWorker } from './product_worker.js';
 
 const require = createRequire(import.meta.url);
 
@@ -77,61 +79,6 @@ async function generateRendering(sourceImageUrl, promptText) {
 }
 
 // ==================================================================
-// 2. NEW: AUTOMATIC BACKGROUND FIXER
-// ==================================================================
-// This runs every 30 seconds to fix NULL descriptions
-async function checkAndFixDescriptions() {
-    try {
-        // 1. Find products where ai_description is NULL
-        const { data: products, error } = await supabase
-            .from('product_gallery')
-            .select('*')
-            .is('ai_description', null)
-            .not('image_url', 'is', null); // Ensure image exists
-
-        if (error) throw error;
-
-        if (products && products.length > 0) {
-            console.log(`🧹 Found ${products.length} products missing AI descriptions. Fixing...`);
-
-            const visionModel = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-
-            for (const product of products) {
-                console.log(`   -> Generating description for: ${product.name}`);
-                
-                const imagePart = await urlToGenerativePart(product.image_url);
-                
-                if (imagePart) {
-                    const prompt = "Describe the window treatment in this image specifically for an AI image generator. Focus on texture, color, material, style (e.g. zebra, roller), and light filtering. Keep it under 20 words.";
-                    
-                    try {
-                        const result = await visionModel.generateContent([prompt, imagePart]);
-                        const aiDesc = result.response.text();
-
-                        // Update the database
-                        await supabase
-                            .from('product_gallery')
-                            .update({ ai_description: aiDesc })
-                            .eq('id', product.id);
-                            
-                        console.log(`      ✅ Fixed!`);
-                    } catch (aiErr) {
-                        console.error(`      ❌ AI Generation Failed for ${product.name}:`, aiErr.message);
-                    }
-                }
-            }
-        }
-    } catch (err) {
-        console.error("Background Worker Error:", err.message);
-    }
-}
-
-// Start the timer (Run every 30 seconds)
-setInterval(checkAndFixDescriptions, 30000);
-// Run once immediately on startup
-checkAndFixDescriptions();
-
-// ==================================================================
 // 4. NEW: CLIENT CONFIG ENDPOINT
 // ==================================================================
 app.get('/client-config/:apiKey', async (req, res) => {
@@ -165,9 +112,13 @@ app.get('/client-config/:apiKey', async (req, res) => {
 app.post('/chat', async (req, res) => {
     try {
         const { history, clientApiKey } = req.body;
+        const accessCheck = await validateClientAccess(supabase, clientApiKey);
+
+        if (!accessCheck.allowed) {
+            return res.json({ reply: accessCheck.error || "Service Suspended." });
+        }
         
-        const { data: client } = await supabase.from('clients').select('*').eq('api_key', clientApiKey).single();
-        if (!client) return res.json({ reply: "Service Suspended." });
+        const client = accessCheck.client;
 
         const { data: products } = await supabase
             .from('product_gallery')
@@ -274,4 +225,5 @@ app.post('/chat', async (req, res) => {
 });
 
 startPersonaWorker();
+startProductWorker();
 app.listen(3000, () => console.log('🚀 Gallery Agent Running'));
