@@ -11,8 +11,6 @@ import { TaskType } from "@google/generative-ai";
 import { startPersonaWorker } from './persona_worker.js'; 
 
 const require = createRequire(import.meta.url);
-const pdfLib = require('pdf-extraction');
-const pdf = pdfLib.default || pdfLib;
 
 dotenv.config();
 const app = express();

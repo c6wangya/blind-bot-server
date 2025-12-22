@@ -2,52 +2,45 @@ import dotenv from 'dotenv';
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { createClient } from '@supabase/supabase-js';
 import axios from 'axios';
-// 👇 NEW LIBRARY (Standard import)
-import pdf from 'pdf-extraction';
+// Note: We NO LONGER need 'pdf-extraction'
 
 dotenv.config();
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
+// Use Service Key for database write permissions
+const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KEY);
 
-// --- HELPER: Download & Parse File ---
-async function extractContentFromUrl(url) {
+// --- HELPER: Prepare File for Gemini (Native PDF Support) ---
+async function downloadFileForGemini(url) {
     if (!url) return null;
     try {
-        // Fix spaces in filenames
         const safeUrl = encodeURI(url);
-        
         console.log(`      📂 Downloading: ${safeUrl}`);
         const response = await axios.get(safeUrl, { responseType: 'arraybuffer' });
         const buffer = Buffer.from(response.data);
         
-        if (url.toLowerCase().includes('.pdf')) {
-            // Check if it's a real PDF file header
-            if (buffer.lastIndexOf("%PDF-", 0) === 0) {
-                 // 👇 SIMPLER USAGE (No more .default issues)
-                 const data = await pdf(buffer);
-                 return data.text.substring(0, 30000); 
-            } else {
-                 console.log("      ⚠️ File extension is .pdf but content is not.");
-                 return null;
+        const mimeType = url.toLowerCase().endsWith('.pdf') ? "application/pdf" : "image/jpeg";
+
+        // Return the format Gemini expects for inline data
+        return {
+            inlineData: {
+                data: buffer.toString('base64'),
+                mimeType: mimeType
             }
-        } else {
-            return "[Image Content Not Parsed]";
-        }
+        };
     } catch (e) {
-        console.error("      ❌ File parsing failed:", e.message);
+        console.error("      ❌ File download failed:", e.message);
         return null;
     }
 }
 
-// --- MAIN WORKER ---
 export async function startPersonaWorker() {
-    console.log("👷 Persona Worker: Started. Watching for empty 'bot_persona' fields...");
+    console.log("👷 Persona Worker: Started. Using Gemini Native PDF Vision...");
 
     setInterval(async () => {
         try {
-            // 1. Find clients who HAVE inputs but NO Persona yet
-            const { data: clients, error } = await supabase
+            // 1. Find clients who need an update
+            const { data: clients } = await supabase
                 .from('clients')
                 .select('*')
                 .or('training_pdf.neq.null,sales_prompt_override.neq.null') 
@@ -55,49 +48,58 @@ export async function startPersonaWorker() {
 
             if (clients && clients.length > 0) {
                 console.log(`📝 Found ${clients.length} clients needing AI Persona generation...`);
+                // Use the 2.5 Flash model (Great for documents)
                 const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
                 for (const client of clients) {
                     console.log(`   -> Processing: ${client.company_name}`);
                     
-                    let pdfContent = "No Training Document provided.";
-                    if (client.training_pdf) {
-                        const extracted = await extractContentFromUrl(client.training_pdf);
-                        if (extracted) pdfContent = extracted;
-                    }
+                    const inputs = [];
 
+                    // 1. Add System Instructions
                     const override = client.sales_prompt_override || "No specific owner instructions.";
-
-                    const systemPrompt = `
+                    const promptText = `
                     You are an expert AI Sales System Architect.
                     
                     YOUR GOAL: 
+                    Read the attached document (PDF) and the Owner Instructions below.
                     Write a "System Instruction" block for a Sales Chatbot.
                     
-                    INPUT DATA:
-                    1. OWNER INSTRUCTIONS (High Priority): "${override}"
-                    2. COMPANY DOCUMENTS: "${pdfContent}"
+                    OWNER INSTRUCTIONS: "${override}"
 
                     RULES:
-                    - IGNORE visual descriptions (logos, layout).
-                    - EXTRACT Policy, Discounts, Hours, and Contact Info.
+                    - The attached PDF contains the source of truth. READ IT VISUALLY.
+                    - EXTRACT Policy, Discounts, Hours, Contact Info, and Company History.
                     - IF Owner Instructions contradict PDF, Owner Instructions WIN.
                     - Output format: "You are the sales assistant for [Company]..."
                     `;
+                    inputs.push(promptText);
 
-                    const result = await model.generateContent(systemPrompt);
+                    // 2. Add the PDF (If it exists)
+                    if (client.training_pdf) {
+                        const pdfPart = await downloadFileForGemini(client.training_pdf);
+                        if (pdfPart) {
+                            inputs.push(pdfPart);
+                            console.log("      📄 Attached PDF to Prompt");
+                        }
+                    }
+
+                    // 3. Generate
+                    const result = await model.generateContent(inputs);
                     const generatedPersona = result.response.text();
 
-                    await supabase
+                    // 4. Save
+                    const { error } = await supabase
                         .from('clients')
                         .update({ bot_persona: generatedPersona })
                         .eq('id', client.id);
 
-                    console.log(`      ✅ Persona Saved for ${client.company_name}!`);
+                    if (error) console.error(`      ❌ DB Error: ${error.message}`);
+                    else console.log(`      ✅ Persona Saved for ${client.company_name}!`);
                 }
             }
         } catch (err) {
             console.error("Persona Worker Error:", err.message);
         }
-    }, 10000); // Check every 10 seconds
+    }, 10000); 
 }
