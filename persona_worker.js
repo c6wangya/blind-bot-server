@@ -2,19 +2,8 @@ import dotenv from 'dotenv';
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { createClient } from '@supabase/supabase-js';
 import axios from 'axios';
-import { createRequire } from 'module'; 
-
-const require = createRequire(import.meta.url);
-const pdfParse = require('pdf-parse'); 
-
-// 🔍 DEBUGGING LINES (Add these temporarily)
-console.log("------------------------------------------------");
-console.log("DEBUGGING PDF PARSE:");
-console.log("Type of pdfParse:", typeof pdfParse);
-console.log("Is it a function?", typeof pdfParse === 'function');
-console.log("Structure:", pdfParse);
-console.log("Does it have .default?", pdfParse.default);
-console.log("------------------------------------------------");
+// 👇 NEW LIBRARY (Standard import)
+import pdf from 'pdf-extraction';
 
 dotenv.config();
 
@@ -25,7 +14,7 @@ const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY
 async function extractContentFromUrl(url) {
     if (!url) return null;
     try {
-        // Fix spaces in filenames (e.g. "home screen.pdf" -> "home%20screen.pdf")
+        // Fix spaces in filenames
         const safeUrl = encodeURI(url);
         
         console.log(`      📂 Downloading: ${safeUrl}`);
@@ -35,10 +24,11 @@ async function extractContentFromUrl(url) {
         if (url.toLowerCase().includes('.pdf')) {
             // Check if it's a real PDF file header
             if (buffer.lastIndexOf("%PDF-", 0) === 0) {
-                 const data = await pdfParse(buffer);
+                 // 👇 SIMPLER USAGE (No more .default issues)
+                 const data = await pdf(buffer);
                  return data.text.substring(0, 30000); 
             } else {
-                 console.log("      ⚠️ File extension is .pdf but content is not (likely an image/error).");
+                 console.log("      ⚠️ File extension is .pdf but content is not.");
                  return null;
             }
         } else {
@@ -56,9 +46,6 @@ export async function startPersonaWorker() {
 
     setInterval(async () => {
         try {
-            // Heartbeat log so you know it's alive (optional, remove later if noisy)
-            // console.log("...Heartbeat: Checking DB for updates...");
-
             // 1. Find clients who HAVE inputs but NO Persona yet
             const { data: clients, error } = await supabase
                 .from('clients')
