@@ -8,6 +8,7 @@ import FormData from 'form-data';
 import sharp from 'sharp'; 
 import { createRequire } from 'module'; 
 import { TaskType } from "@google/generative-ai";
+import { startPersonaWorker } from './persona_worker.js'; 
 
 const require = createRequire(import.meta.url);
 const pdfLib = require('pdf-parse');
@@ -187,7 +188,7 @@ app.post('/chat', async (req, res) => {
           "selected_product_name": "Exact Name From List" 
         }
 
-        YOUR KNOWLEDGE:
+        YOUR IDENTITY AND RULE:
         ${client.bot_persona || "You are a sales assistant."}
         
         AVAILABLE PRODUCTS: ${productNames}
@@ -274,4 +275,5 @@ app.post('/chat', async (req, res) => {
     }
 });
 
+startPersonaWorker();
 app.listen(3000, () => console.log('🚀 Gallery Agent Running'));

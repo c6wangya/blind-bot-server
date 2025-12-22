@@ -84,28 +84,37 @@
         container.appendChild(bubble);
         document.body.appendChild(container);
 
-        // Toggle Logic
+        // Toggle Logic (HOVER TO OPEN)
         let isOpen = false;
-        function toggleChat() {
-            isOpen = !isOpen;
-            if (isOpen) {
-                iframeBox.style.display = 'block';
-                setTimeout(() => {
-                    iframeBox.style.opacity = '1';
-                    iframeBox.style.transform = 'translateY(0)';
-                }, 10);
-                icon.style.display = 'none';
-                closeIcon.style.display = 'block';
-            } else {
-                iframeBox.style.opacity = '0';
-                iframeBox.style.transform = 'translateY(20px)';
-                setTimeout(() => {
-                    iframeBox.style.display = 'none';
-                }, 300);
-                icon.style.display = 'block';
-                closeIcon.style.display = 'none';
-            }
+
+        function openChat() {
+            if (isOpen) return;
+            isOpen = true;
+            iframeBox.style.display = 'block';
+            setTimeout(() => {
+                iframeBox.style.opacity = '1';
+                iframeBox.style.transform = 'translateY(0)';
+            }, 10);
+            icon.style.display = 'none';
+            closeIcon.style.display = 'block';
         }
-        bubble.addEventListener('click', toggleChat);
+
+        function closeChat() {
+            if (!isOpen) return;
+            isOpen = false;
+            iframeBox.style.opacity = '0';
+            iframeBox.style.transform = 'translateY(20px)';
+            setTimeout(() => {
+                iframeBox.style.display = 'none';
+            }, 300);
+            icon.style.display = 'block';
+            closeIcon.style.display = 'none';
+        }
+
+        // 1. Open on Hover
+        bubble.addEventListener('mouseenter', openChat);
+
+        // 2. Close on Click (the 'X' button)
+        bubble.addEventListener('click', closeChat);
     }
 })();
