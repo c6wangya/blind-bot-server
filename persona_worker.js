@@ -5,8 +5,7 @@ import axios from 'axios';
 import { createRequire } from 'module'; 
 
 const require = createRequire(import.meta.url);
-const pdfLib = require('pdf-parse');
-const pdf = pdfLib.default || pdfLib;
+const pdfParse = require('pdf-parse'); // ✅ Simplified import
 
 dotenv.config();
 
@@ -17,15 +16,28 @@ const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY
 async function extractContentFromUrl(url) {
     if (!url) return null;
     try {
-        console.log(`      📂 Downloading PDF: ${url}`);
-        const response = await axios.get(url, { responseType: 'arraybuffer' });
+        // ✅ Fix: Handle spaces in filenames (e.g. "home screen.pdf")
+        const safeUrl = encodeURI(url);
+        
+        console.log(`      📂 Downloading PDF: ${safeUrl}`);
+        const response = await axios.get(safeUrl, { responseType: 'arraybuffer' });
         const buffer = Buffer.from(response.data);
         
+        // 1. If PDF -> Extract Text
         if (url.toLowerCase().includes('.pdf')) {
-            const data = await pdf(buffer);
-            return data.text.substring(0, 30000); // Limit text length for safety
-        } else {
-            // If it's an image, we skip text parsing (or you can add Vision logic here if needed)
+            // Safety Check: Ensure it's actually a PDF buffer
+            if (buffer.lastIndexOf("%PDF-", 0) === 0) {
+                 const data = await pdfParse(buffer);
+                 return data.text.substring(0, 30000); // Limit text length
+            } else {
+                 console.log("      ⚠️ Warning: File extension is .pdf but content is not.");
+                 return null;
+            }
+        } 
+        // 2. If Image -> Prepare for Vision Model
+        else {
+             // For images, we skip text parsing and return a placeholder 
+             // (or you can add Vision logic here if you want image analysis)
             return "[Image Content Not Parsed in this version]";
         }
     } catch (e) {
@@ -41,7 +53,6 @@ export async function startPersonaWorker() {
     setInterval(async () => {
         try {
             // 1. Find clients who need a Persona update
-            // Logic: They have EITHER a PDF or an Override, but 'bot_persona' is NULL
             const { data: clients, error } = await supabase
                 .from('clients')
                 .select('*')
@@ -91,7 +102,7 @@ export async function startPersonaWorker() {
                     const result = await model.generateContent(systemPrompt);
                     const generatedPersona = result.response.text();
 
-                    // E. Save to Supabase (so we don't have to do this again)
+                    // E. Save to Supabase
                     await supabase
                         .from('clients')
                         .update({ bot_persona: generatedPersona })
