@@ -22,24 +22,35 @@
         .preview-wrapper { position: relative; margin-top: 10px; }
         .remove-btn { position: absolute; top: -5px; right: -5px; background: red; color: white; border-radius: 50%; width: 18px; height: 18px; font-size: 12px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
 
-        /* NEW: PRODUCT CARD CAROUSEL */
-        .product-carousel {
-            display: flex; gap: 10px; overflow-x: auto; padding: 10px 0;
-            scrollbar-width: none; /* Hide scrollbar Firefox */
+        /* NEW: PRODUCT GRID SCROLL */
+        .product-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr; /* Two columns */
+            gap: 8px;
+            padding: 10px 5px;
+            
+            /* Vertical Scroll Panel Settings */
+            max-height: 300px; 
+            overflow-y: auto; 
+            border-top: 1px solid #eee;
+            margin-top: 10px;
         }
-        .product-carousel::-webkit-scrollbar { display: none; } /* Hide scrollbar Chrome */
+
+        /* Scrollbar styling for the panel */
+        .product-grid::-webkit-scrollbar { width: 5px; }
+        .product-grid::-webkit-scrollbar-thumb { background-color: #ccc; border-radius: 4px; }
         
         .product-card {
-            min-width: 140px; width: 140px;
             background: white; border-radius: 12px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
             overflow: hidden; cursor: pointer;
             transition: transform 0.2s;
             border: 1px solid #eee;
+            /* Removed min-width so it fits the grid */
         }
-        .product-card:hover { transform: translateY(-3px); border-color: #333; }
-        .product-card img { width: 100%; height: 100px; object-fit: cover; }
-        .product-card span { display: block; padding: 8px; font-size: 12px; font-weight: 600; text-align: center; color: #333; }
+        .product-card:hover { transform: translateY(-2px); border-color: #333; }
+        .product-card img { width: 100%; height: 90px; object-fit: cover; }
+        .product-card span { display: block; padding: 8px; font-size: 11px; font-weight: 600; text-align: center; color: #333; line-height: 1.3; }
 
         /* CONTROLS */
         .controls { display: flex; gap: 10px; align-items: flex-end; padding: 15px; border-top: 1px solid #eee; background: white; }
@@ -160,7 +171,7 @@
             // 2. PRODUCT CARDS (NEW)
             let cardsHtml = "";
             if (data.product_suggestions && data.product_suggestions.length > 0) {
-                cardsHtml = `<div class="product-carousel">`;
+                cardsHtml = `<div class="product-grid">`;
                 data.product_suggestions.forEach(prod => {
                     // Click sends the product name as a message
                     cardsHtml += `
