@@ -189,7 +189,7 @@ app.post('/chat', async (req, res) => {
            - DO NOT send "product_suggestions" unless they explicitly ask to see options or upload an image.
         `;
 
-        const model = genAI.getGenerativeModel({ model: "gemini-3-flash", systemInstruction: finalSystemPrompt, generationConfig: { responseMimeType: "application/json" } });
+        const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview", systemInstruction: finalSystemPrompt, generationConfig: { responseMimeType: "application/json" } });
         
         // C. Parse History for Image
         const pastHistory = history.slice(0, -1);
