@@ -93,8 +93,10 @@
     // --- 2. INITIALIZE HISTORY WITH GREETING ---
     // We "fake" that the AI already said this, so the server knows the conversation has started.
     let history = [
-        { role: "model", parts: [{ text: initialGreeting }] }
-    ]; 
+    
+    { role: "user", parts: [{ text: "Hello" }] }, 
+    { role: "model", parts: [{ text: initialGreeting }] }
+];
     
     let stagedImages = []; 
         
