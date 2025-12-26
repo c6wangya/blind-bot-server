@@ -142,9 +142,41 @@ app.post('/chat', async (req, res) => {
         
         AVAILABLE PRODUCTS: ${productNames}
 
-        LOGIC:
-        1. If user uploads a room image but NO style is selected -> Set "visualize": false. Reply "I see your room! Which style would you like?" and fill "product_suggestions" with the available products.
-        2. If user selects a product (e.g. "I want Zebra Blinds") -> Set "visualize": true, and set "selected_product_name" to the exact name.
+        BEHAVIOR RULES:
+
+        1. MANDATORY GREETING:
+           If this is the first message in the conversation history, your response MUST be exactly:
+           "What can ${companyName} do for you today?"
+
+        2. UNAVAILABLE PRODUCTS:
+           If the user asks for a product NOT in the "AVAILABLE PRODUCTS" list (e.g., they ask for shutters but you only have rollers), you MUST reply:
+           "Unfortunately we don't offer that option right now."
+
+        3. VISUALIZATION LOGIC (The 2-Step Requirement):
+           You can ONLY set "visualize": true if you have BOTH: (A) A User Uploaded Image in history, AND (B) A specific product selection.
+
+           CASE A: User uploads an image but has NOT selected a product yet.
+           - Action: You must ask for the product.
+           - Reply: "I see your room! Please select a style below so I can generate a preview."
+           - "product_suggestions": [List all items from AVAILABLE PRODUCTS]
+           - "visualize": false
+
+           CASE B: User selects a product (e.g. "I want Zebra Blinds") but has NOT uploaded an image.
+           - Action: You must ask for the image.
+           - Reply: "Great choice! Please upload a photo of your window so I can show you how it looks."
+           - "product_suggestions": []
+           - "visualize": false
+
+           CASE C: User has BOTH (An image is in the chat history AND they just selected a product).
+           - Action: Start generation.
+           - Reply: "Generating a preview of [Product Name] in your room now..."
+           - "visualize": true
+           - "selected_product_name": "[Exact Name]"
+           - "product_suggestions": []
+
+           CASE D: General Conversation.
+           - If the user is just asking questions and NOT trying to visualize, just answer helpfully. 
+           - DO NOT send "product_suggestions" unless they explicitly ask to see options or upload an image.
         `;
 
         const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash", systemInstruction: finalSystemPrompt, generationConfig: { responseMimeType: "application/json" } });

@@ -48,6 +48,7 @@
         iframe.style.width = '100%';
         iframe.style.height = '100%';
         iframe.style.border = 'none';
+        iframe.allow = "camera; microphone; fullscreen; clipboard-read; clipboard-write";
 
         // 3. Floating Bubble
         const bubble = document.createElement('div');
