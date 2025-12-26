@@ -43,37 +43,47 @@ async function urlToGenerativePart(url) {
 }
 
 async function generateRendering(sourceImageUrl, promptText) {
-    // (Your existing visualization logic - unchanged)
     try {
-        console.log("🎨 Downloading customer room image...");
-        const imageResponse = await axios.get(sourceImageUrl, { responseType: 'arraybuffer' });
-        const buffer = Buffer.from(imageResponse.data);
-
-        console.log("💎 Sending to Stability AI...");
-        const payload = new FormData();
-        payload.append('image', buffer, 'source.jpg');
-        payload.append('strength', 0.65); 
+        console.log("🎨 Generating with Nano Banana Pro (Gemini 3 Pro Image)...");
         
-        const fullPrompt = `${promptText}, fully closed, covering window, interior design photography, 8k, professional lighting`;
+        // 1. Prepare the model (Nano Banana Pro)
+        const imageModel = genAI.getGenerativeModel({ model: "gemini-3-pro-image-preview" });
         
-        payload.append('prompt', fullPrompt);
-        payload.append('output_format', 'png');
-        payload.append('negative_prompt', 'distorted, blurry, open blinds, bad architecture');
+        // 2. Download the room image
+        const imagePart = await urlToGenerativePart(sourceImageUrl);
+        if (!imagePart) throw new Error("Could not download source image.");
 
-        const response = await axios.post(
-            'https://api.stability.ai/v2beta/stable-image/generate/core',
-            payload,
-            { headers: { ...payload.getHeaders(), Authorization: `Bearer ${process.env.STABILITY_API_KEY}`, Accept: 'application/json' } }
-        );
+        // 3. Construct Prompt
+        const fullPrompt = `
+        Turn this room image into a professional interior design photo.
+        Apply the following window treatment strictly: ${promptText}.
+        Keep the original room layout, furniture, and lighting.
+        High resolution, photorealistic, 8k.
+        `;
 
-        const base64Image = response.data.image; 
+        // 4. Generate (Image-to-Image)
+        const result = await imageModel.generateContent([fullPrompt, imagePart]);
+        const response = result.response;
+        
+        // 5. Extract Image
+        if (!response.candidates || !response.candidates[0].content.parts) {
+            throw new Error("No image generated.");
+        }
+        const generatedPart = response.candidates[0].content.parts.find(p => p.inlineData);
+        if (!generatedPart) throw new Error("API returned text but no image.");
+
+        const base64Image = generatedPart.inlineData.data;
+
+        // 6. Upload to Supabase
         const fileName = `renderings/${Date.now()}_render.png`;
         const { error } = await supabase.storage.from('chat-uploads').upload(fileName, Buffer.from(base64Image, 'base64'), { contentType: 'image/png' });
         
+        if (error) throw error;
         const { data: urlData } = supabase.storage.from('chat-uploads').getPublicUrl(fileName);
         return urlData.publicUrl;
+
     } catch (err) {
-        console.error("Stability Error:", err.response ? err.response.data : err.message);
+        console.error("Nano Banana Error:", err.message);
         return null;
     }
 }
@@ -179,7 +189,7 @@ app.post('/chat', async (req, res) => {
            - DO NOT send "product_suggestions" unless they explicitly ask to see options or upload an image.
         `;
 
-        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash", systemInstruction: finalSystemPrompt, generationConfig: { responseMimeType: "application/json" } });
+        const model = genAI.getGenerativeModel({ model: "gemini-3-flash", systemInstruction: finalSystemPrompt, generationConfig: { responseMimeType: "application/json" } });
         
         // C. Parse History for Image
         const pastHistory = history.slice(0, -1);
@@ -239,7 +249,7 @@ app.post('/chat', async (req, res) => {
             if (selectedProduct) {
                 // FALLBACK: If AI description is still null (script hasn't run yet), use plain description
                 const desc = selectedProduct.ai_description || selectedProduct.description;
-                const combinedPrompt = `${selectedProduct.description}. ${desc}`;
+                const combinedPrompt = `Install ${selectedProduct.name} (${desc}) on the windows.`;
                 
                 console.log(`🎨 Generating with prompt: ${combinedPrompt}`);
                 

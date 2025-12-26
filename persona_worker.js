@@ -48,8 +48,8 @@ export async function startPersonaWorker() {
 
             if (clients && clients.length > 0) {
                 console.log(`📝 Found ${clients.length} clients needing AI Persona generation...`);
-                // Use the 2.5 Flash model (Great for documents)
-                const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+                // Use the 3 Flash model (Great for documents)
+                const model = genAI.getGenerativeModel({ model: "gemini-3-flash" });
 
                 for (const client of clients) {
                     console.log(`   -> Processing: ${client.company_name}`);
