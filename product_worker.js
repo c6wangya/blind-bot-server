@@ -43,7 +43,7 @@ export async function startProductWorker() {
 
             if (products && products.length > 0) {
                 console.log(`🧹 Found ${products.length} products missing AI descriptions. Processing...`);
-                const visionModel = genAI.getGenerativeModel({ model: "gemini-3-flash" });
+                const visionModel = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
 
                 for (const product of products) {
                     console.log(`   -> Generating description for: ${product.name}`);
