@@ -96,7 +96,7 @@ app.get('/client-config/:apiKey', async (req, res) => {
         const { apiKey } = req.params;
         const { data: client, error } = await supabase
             .from('clients')
-            .select('primary_color, logo_url, company_name') // ⚠️ Make sure these column names match your Supabase table
+            .select('primary_color, logo_url, company_name, greeting_override') 
             .eq('api_key', apiKey)
             .single();
 
@@ -106,9 +106,10 @@ app.get('/client-config/:apiKey', async (req, res) => {
 
         // Return the customization settings
         res.json({
-            color: client.primary_color || "#333333", // Fallback color
+            color: client.primary_color || "#333333",
             logo: client.logo_url || "",
-            name: client.company_name
+            name: client.company_name,
+            greeting: client.greeting_override || "" 
         });
 
     } catch (err) {

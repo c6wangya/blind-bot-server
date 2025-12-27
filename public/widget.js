@@ -43,11 +43,11 @@
         // Pass color and logo to the internal HTML via URL parameters
         const themeParam = encodeURIComponent(config.color);
         const logoParam = encodeURIComponent(config.logo);
-        // 1. Add Name Parameter
         const nameParam = encodeURIComponent(config.name || "us"); 
+        const greetingParam = encodeURIComponent(config.greeting || "");
         const iframe = document.createElement('iframe');
         // 2. Pass it in the URL
-        iframe.src = `${SERVER_URL}/chat.html?apiKey=${apiKey}&theme=${themeParam}&logo=${logoParam}&name=${nameParam}`;
+        iframe.src = `${SERVER_URL}/chat.html?apiKey=${apiKey}&theme=${themeParam}&logo=${logoParam}&name=${nameParam}&greeting=${greetingParam}`;
         iframe.style.width = '100%';
         iframe.style.height = '100%';
         iframe.style.border = 'none';
