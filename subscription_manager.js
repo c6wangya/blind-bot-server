@@ -30,14 +30,14 @@ export async function validateClientAccess(supabase, apiKey) {
         }
 
         // 3. CHECK 2: Must have Credits
-        if (!client.credits || client.credits <= 0) {
-            return { allowed: false, error: "Service Suspended: Insufficient credits." };
+        if (!client.image_credits || client.image_credits <= 0) {
+            return { allowed: false, error: "Service Suspended: Insufficient image_credits." };
         }
 
         // 4. If Both Passed: Deduct Credit
         const { error: updateError } = await supabase
             .from('clients')
-            .update({ credits: client.credits - 1 })
+            .update({ image_credits: client.image_credits - 1 })
             .eq('id', client.id);
 
         if (updateError) {
