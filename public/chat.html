@@ -88,7 +88,11 @@
     // --- 1. CAPTURE COMPANY NAME ---
     // This grabs the name passed from widget.js
     const companyName = urlParams.get('name') || "us";
-    const initialGreeting = `What can ${companyName} do for you today?`;
+    const greetingParam = urlParams.get('greeting');
+
+    const initialGreeting = (greetingParam && greetingParam !== "null" && greetingParam !== "") 
+        ? greetingParam 
+        : `What can ${companyName} do for you today?`;
 
     // --- 2. INITIALIZE HISTORY WITH GREETING ---
     // We "fake" that the AI already said this, so the server knows the conversation has started.
