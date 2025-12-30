@@ -8,9 +8,9 @@ import FormData from 'form-data';
 import sharp from 'sharp'; 
 import { createRequire } from 'module'; 
 import { TaskType } from "@google/generative-ai";
-import { startPersonaWorker } from './persona_worker.js'; 
-import { validateClientAccess, deductImageCredit } from './subscription_manager.js'; 
 import { startProductWorker } from './product_worker.js';
+import { validateClientAccess, deductImageCredit } from './subscription_manager.js'; 
+import { startPersonaWorker, forceRetrainClient } from './persona_worker.js';
 import { setupStripeWebhook, createPortalSession } from './stripe_handler.js';
 import { handleLeadData } from './leads_manager.js'; 
 import { setupPreviewRoutes } from './preview_handler.js';
@@ -340,4 +340,19 @@ app.get('/create-portal-session/:apiKey', async (req, res) => {
 setupPreviewRoutes(app, supabase);
 startPersonaWorker();
 startProductWorker();
+app.post('/train-agent', async (req, res) => {
+    try {
+        const { clientApiKey } = req.body;
+        if (!clientApiKey) return res.status(400).json({ error: "Missing API Key" });
+
+        // Trigger the manual retrain
+        await forceRetrainClient(clientApiKey);
+
+        res.json({ success: true });
+
+    } catch (err) {
+        console.error("Training Error:", err.message);
+        res.status(500).json({ error: "Training failed. Please try again." });
+    }
+});
 app.listen(3000, () => console.log('🚀 Gallery Agent Running'));

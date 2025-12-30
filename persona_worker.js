@@ -2,15 +2,12 @@ import dotenv from 'dotenv';
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { createClient } from '@supabase/supabase-js';
 import axios from 'axios';
-// Note: We NO LONGER need 'pdf-extraction'
 
 dotenv.config();
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-// Use Service Key for database write permissions
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KEY);
 
-// --- HELPER: Prepare File for Gemini (Native PDF Support) ---
 async function downloadFileForGemini(url) {
     if (!url) return null;
     try {
@@ -35,11 +32,10 @@ async function downloadFileForGemini(url) {
 }
 
 export async function startPersonaWorker() {
-    console.log("👷 Persona Worker: Started. Using Gemini Native PDF Vision...");
-
+    console.log("👷 Persona Worker: Started.");
     setInterval(async () => {
         try {
-            // 1. Find clients who need an update
+            // Only find clients who HAVE NO persona yet (First time setup)
             const { data: clients } = await supabase
                 .from('clients')
                 .select('*')
@@ -47,59 +43,75 @@ export async function startPersonaWorker() {
                 .is('bot_persona', null); 
 
             if (clients && clients.length > 0) {
-                console.log(`📝 Found ${clients.length} clients needing AI Persona generation...`);
-                // Use the 3 Flash model (Great for documents)
-                const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
-
+                console.log(`📝 Found ${clients.length} new clients needing setup...`);
                 for (const client of clients) {
-                    console.log(`   -> Processing: ${client.company_name}`);
-                    
-                    const inputs = [];
-
-                    // 1. Add System Instructions
-                    const override = client.sales_prompt_override || "No specific owner instructions.";
-                    const promptText = `
-                    You are an expert AI Sales System Architect.
-                    
-                    YOUR GOAL: 
-                    Read the attached document (PDF) and the Owner Instructions below.
-                    Write a "System Instruction" block for a Sales Chatbot.
-                    
-                    OWNER INSTRUCTIONS: "${override}"
-
-                    RULES:
-                    - The attached PDF contains the source of truth. READ IT VISUALLY.
-                    - EXTRACT Policy, Discounts, Hours, Contact Info, and Company History.
-                    - IF Owner Instructions contradict PDF, Owner Instructions WIN.
-                    - Output format: "You are the sales assistant for [Company]..."
-                    `;
-                    inputs.push(promptText);
-
-                    // 2. Add the PDF (If it exists)
-                    if (client.training_pdf) {
-                        const pdfPart = await downloadFileForGemini(client.training_pdf);
-                        if (pdfPart) {
-                            inputs.push(pdfPart);
-                            console.log("      📄 Attached PDF to Prompt");
-                        }
-                    }
-
-                    // 3. Generate
-                    const result = await model.generateContent(inputs);
-                    const generatedPersona = result.response.text();
-
-                    // 4. Save
-                    const { error } = await supabase
-                        .from('clients')
-                        .update({ bot_persona: generatedPersona })
-                        .eq('id', client.id);
-
-                    if (error) console.error(`      ❌ DB Error: ${error.message}`);
-                    else console.log(`      ✅ Persona Saved for ${client.company_name}!`);
+                    // Call the new helper function
+                    await generateClientPersona(client);
                 }
             }
         } catch (err) {
             console.error("Persona Worker Error:", err.message);
         }
     }, 10000); 
+}
+// --- CORE LOGIC: Generate Persona for One Client ---
+// We extracted this so the button can use it!
+export async function generateClientPersona(client) {
+    console.log(`   -> Processing Persona for: ${client.company_name}`);
+    // Use 1.5 Flash for speed/PDFs or the model you prefer
+    const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" }); 
+
+    const inputs = [];
+    const override = client.sales_prompt_override || "No specific owner instructions.";
+    
+    const promptText = `
+    You are an expert AI Sales System Architect.
+    
+    YOUR GOAL: 
+    Read the attached document (PDF) and the Owner Instructions below.
+    Write a "System Instruction" block for a Sales Chatbot.
+    
+    OWNER INSTRUCTIONS: "${override}"
+
+    RULES:
+    - The attached PDF contains the source of truth. READ IT VISUALLY.
+    - EXTRACT Policy, Discounts, Hours, Contact Info, and Company History.
+    - IF Owner Instructions contradict PDF, Owner Instructions WIN.
+    - Output format: "You are the sales assistant for [Company]..."
+    `;
+    inputs.push(promptText);
+
+    // Add PDF if exists
+    if (client.training_pdf) {
+        const pdfPart = await downloadFileForGemini(client.training_pdf);
+        if (pdfPart) inputs.push(pdfPart);
+    }
+
+    // Generate
+    const result = await model.generateContent(inputs);
+    const generatedPersona = result.response.text();
+
+    // Save to DB
+    const { error } = await supabase
+        .from('clients')
+        .update({ bot_persona: generatedPersona })
+        .eq('id', client.id);
+
+    if (error) {
+        throw new Error(`DB Error: ${error.message}`);
+    } else {
+        console.log(`      ✅ Persona Saved for ${client.company_name}!`);
+        return true;
+    }
+}
+
+// --- MANUAL TRIGGER: Force Update ---
+// This is what the button calls
+export async function forceRetrainClient(apiKey) {
+    const { data: client } = await supabase.from('clients').select('*').eq('api_key', apiKey).single();
+    if (!client) throw new Error("Client not found");
+    
+    console.log(`🔄 Manual Retrain Triggered for ${client.company_name}`);
+    await generateClientPersona(client);
+    return true;
 }
