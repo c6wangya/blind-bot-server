@@ -99,9 +99,10 @@ async function generateRendering(sourceImageUrl, promptText) {
 app.get('/client-config/:apiKey', async (req, res) => {
     try {
         const { apiKey } = req.params;
+        // FIX 1: We added the new columns to the select list
         const { data: client, error } = await supabase
             .from('clients')
-            .select('primary_color, logo_url, company_name, greeting_override') 
+            .select('primary_color, logo_url, company_name, greeting_override, widget_alignment, widget_side_margin, widget_bottom_margin, widget_height') 
             .eq('api_key', apiKey)
             .single();
 
@@ -114,12 +115,42 @@ app.get('/client-config/:apiKey', async (req, res) => {
             color: client.primary_color || "#333333",
             logo: client.logo_url || "",
             name: client.company_name,
-            greeting: client.greeting_override || "" 
+            greeting: client.greeting_override || "", // FIX 2: Added comma here
+            alignment: client.widget_alignment || 'right',
+            sideMargin: client.widget_side_margin || 20,
+            bottomMargin: client.widget_bottom_margin || 20,
+            height: client.widget_height || 600
         });
 
     } catch (err) {
         console.error("Config Error:", err);
         res.status(500).json({ error: "Server Error" });
+    }
+}); // FIX 3: Closed the function properly
+
+app.post('/update-widget-settings', async (req, res) => {
+    try {
+        const { clientApiKey, alignment, sideMargin, bottomMargin, height } = req.body;
+
+        // Validation
+        if (!['left', 'right'].includes(alignment)) return res.status(400).json({ error: "Invalid alignment" });
+
+        const { error } = await supabase
+            .from('clients')
+            .update({
+                widget_alignment: alignment,
+                widget_side_margin: sideMargin,
+                widget_bottom_margin: bottomMargin,
+                widget_height: height
+            })
+            .eq('api_key', clientApiKey);
+
+        if (error) throw error;
+        res.json({ success: true });
+
+    } catch (err) {
+        console.error("Update Settings Error:", err.message);
+        res.status(500).json({ error: "Update failed" });
     }
 });
 // ==================================================================

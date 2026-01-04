@@ -13,24 +13,38 @@
         })
         .catch(err => {
             console.error("BlindBot: Could not load config", err);
-            // Fallback if server fails
-            initBot({ color: "#333", logo: "" });
+            // Fallback
+            initBot({ color: "#333", alignment: 'right', sideMargin: 20, bottomMargin: 20, height: 600 });
         });
 
     function initBot(config) {
+        // Defaults if missing
+        const align = config.alignment || 'right';
+        const sideGap = (config.sideMargin !== undefined) ? config.sideMargin : 20;
+        const bottomGap = (config.bottomMargin !== undefined) ? config.bottomMargin : 20;
+        const chatHeight = (config.height !== undefined) ? config.height : 600;
+
         // 1. Create Container
         const container = document.createElement('div');
         container.id = 'blind-bot-container';
         container.style.position = 'fixed';
-        container.style.bottom = '20px';
-        container.style.right = '20px';
+        container.style.bottom = `${bottomGap}px`;
         container.style.zIndex = '999999';
         container.style.fontFamily = 'sans-serif';
+        
+        // DYNAMIC ALIGNMENT
+        if (align === 'left') {
+            container.style.left = `${sideGap}px`;
+            container.style.right = 'auto';
+        } else {
+            container.style.right = `${sideGap}px`;
+            container.style.left = 'auto';
+        }
 
         // 2. Chat Window (Iframe)
         const iframeBox = document.createElement('div');
         iframeBox.style.width = '350px';
-        iframeBox.style.height = '600px';
+        iframeBox.style.height = `${chatHeight}px`; // Dynamic Height
         iframeBox.style.marginBottom = '15px';
         iframeBox.style.borderRadius = '12px';
         iframeBox.style.boxShadow = '0 5px 25px rgba(0,0,0,0.15)';
@@ -39,14 +53,15 @@
         iframeBox.style.opacity = '0';
         iframeBox.style.transform = 'translateY(20px)';
         iframeBox.style.transition = 'all 0.3s ease';
-        
-        // Pass color and logo to the internal HTML via URL parameters
-        const themeParam = encodeURIComponent(config.color);
-        const logoParam = encodeURIComponent(config.logo);
+        iframeBox.style.backgroundColor = '#fff';
+
+        // Params
+        const themeParam = encodeURIComponent(config.color || "#333");
+        const logoParam = encodeURIComponent(config.logo || "");
         const nameParam = encodeURIComponent(config.name || "us"); 
         const greetingParam = encodeURIComponent(config.greeting || "");
+
         const iframe = document.createElement('iframe');
-        // 2. Pass it in the URL
         iframe.src = `${SERVER_URL}/chat.html?apiKey=${apiKey}&theme=${themeParam}&logo=${logoParam}&name=${nameParam}&greeting=${greetingParam}`;
         iframe.style.width = '100%';
         iframe.style.height = '100%';
@@ -58,13 +73,17 @@
         bubble.style.width = '60px';
         bubble.style.height = '60px';
         bubble.style.borderRadius = '50%';
-        bubble.style.backgroundColor = config.color; // <--- DYNAMIC COLOR
+        bubble.style.backgroundColor = config.color || "#333";
         bubble.style.boxShadow = '0 4px 12px rgba(0,0,0,0.2)';
         bubble.style.cursor = 'pointer';
         bubble.style.display = 'flex';
         bubble.style.alignItems = 'center';
         bubble.style.justifyContent = 'center';
         bubble.style.transition = 'transform 0.2s';
+        
+        // Float logic for button specifically (to align it within container)
+        bubble.style.marginLeft = align === 'left' ? '0' : 'auto';
+        bubble.style.marginRight = align === 'right' ? '0' : 'auto';
 
         // Chat Icon
         const icon = document.createElement('img');
@@ -88,7 +107,7 @@
         container.appendChild(bubble);
         document.body.appendChild(container);
 
-        // Toggle Logic (HOVER TO OPEN)
+        // Toggle Logic
         let isOpen = false;
 
         function openChat() {
@@ -115,10 +134,7 @@
             closeIcon.style.display = 'none';
         }
 
-        // 1. Open on Hover
         bubble.addEventListener('mouseenter', openChat);
-
-        // 2. Close on Click (the 'X' button)
-        bubble.addEventListener('click', closeChat);
+        bubble.addEventListener('click', () => isOpen ? closeChat() : openChat());
     }
 })();
