@@ -4,10 +4,11 @@ import axios from 'axios';
 export function setupPreviewRoutes(app, supabase) {
     console.log("🖼️ Preview Module Loaded.");
 
-    // 1. PREVIEW BY API KEY (The Worker)
+    // 1. PREVIEW BY API KEY
     app.get('/preview/:apiKey', async (req, res) => {
         try {
             const { apiKey } = req.params;
+            const { no_widget } = req.query; // <--- NEW: Check for flag
 
             // Fetch Client Info
             const { data: client } = await supabase
@@ -18,13 +19,15 @@ export function setupPreviewRoutes(app, supabase) {
 
             if (!client) return res.status(404).send("Client not found");
 
-            // Define the Widget Script Tag (Pointing to your live server)
+            // Define the Widget Script Tag
             const scriptTag = `<script src="https://blind-bot-server.onrender.com/widget.js" data-api-key="${apiKey}"></script>`;
 
             // SCENARIO A: Custom Website URL Exists
             if (client.website_url) {
                 try {
-                    const response = await axios.get(client.website_url);
+                    const response = await axios.get(client.website_url, {
+                        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
+                    });
                     let html = response.data;
 
                     // INJECT <base> tag to fix relative links
@@ -32,17 +35,19 @@ export function setupPreviewRoutes(app, supabase) {
                         html = html.replace('<head>', `<head><base href="${client.website_url}">`);
                     }
 
-                    // INJECT Widget Script
-                    html = html.replace('</body>', `${scriptTag}</body>`);
+                    // INJECT Widget Script (ONLY IF no_widget is NOT true)
+                    if (no_widget !== 'true') {
+                         html = html.replace('</body>', `${scriptTag}</body>`);
+                    }
+                    
                     return res.send(html);
 
                 } catch (fetchErr) {
                     console.error("Preview Fetch Error:", fetchErr.message);
-                    // Fall through to generic page if fetch fails
                 }
             }
 
-            // SCENARIO B: Generic Fallback Page (Keeps server.js clean!)
+            // SCENARIO B: Generic Fallback Page
             const genericHtml = `
                 <!DOCTYPE html>
                 <html>
@@ -61,7 +66,7 @@ export function setupPreviewRoutes(app, supabase) {
                         <p>This is a preview of how your AI Assistant behaves.</p>
                         <p>On your real website, it will float in the corner just like this.</p>
                     </div>
-                    ${scriptTag}
+                    ${no_widget !== 'true' ? scriptTag : ''}
                 </body>
                 </html>
             `;
