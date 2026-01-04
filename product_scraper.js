@@ -20,7 +20,7 @@ async function findBestMatch(existingProducts, newItemName) {
 
     // 2. Smart Check: AI Semantic Match (Slower but smart)
     try {
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
         
         // We send the list of names and ask it to pick the winner
         const namesList = existingProducts.map(p => `ID_${p.id}: ${p.name}`).join("\n");
