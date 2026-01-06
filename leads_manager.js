@@ -1,63 +1,84 @@
 import { sendLeadNotification } from './email_handler.js';
 
 export async function handleLeadData(supabase, clientId, leadData) {
+    // 1. Safety Check: Don't save empty ghosts
     if (!leadData.name && !leadData.phone && !leadData.email) return;
 
-    console.log(`💾 Processing Lead for Client ${clientId}...`);
-
     try {
+        // 2. DEDUPLICATION: Check if this person exists already
+        // We search for a lead belonging to this Client that matches the Email OR Phone
+        let query = supabase
+            .from('leads')
+            .select('*')
+            .eq('client_id', clientId);
+
+        const conditions = [];
+        if (leadData.email) conditions.push(`customer_email.eq.${leadData.email}`);
+        if (leadData.phone) conditions.push(`customer_phone.eq.${leadData.phone}`);
+
         let existingLead = null;
 
-        // 1. FIND EXISTING LEAD
-        if (leadData.phone) {
-             const { data } = await supabase.from('leads').select('*').eq('client_id', clientId).eq('customer_phone', leadData.phone).maybeSingle();
-             if (data) existingLead = data;
-        }
-        if (!existingLead && leadData.email) {
-             const { data } = await supabase.from('leads').select('*').eq('client_id', clientId).eq('customer_email', leadData.email).maybeSingle();
-             if (data) existingLead = data;
-        }
-
-        // 2. PREPARE DATA
-        let finalCustomerImages = existingLead ? (existingLead.customer_images || []) : [];
-        let finalAiRenderings = existingLead ? (existingLead.ai_renderings || []) : [];
-
-        if (leadData.new_customer_image && !finalCustomerImages.includes(leadData.new_customer_image)) {
-            finalCustomerImages.push(leadData.new_customer_image);
-        }
-        if (leadData.new_ai_rendering && !finalAiRenderings.includes(leadData.new_ai_rendering)) {
-            finalAiRenderings.push(leadData.new_ai_rendering);
+        // Only run the search if we have a phone or email to match against
+        if (conditions.length > 0) {
+            const { data: found } = await query.or(conditions.join(','));
+            
+            if (found && found.length > 0) {
+                // If multiple matches (rare), grab the most recent one
+                existingLead = found.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0];
+            }
         }
 
-        const dbPayload = {
+        // 3. Prepare the data payload
+        // We use "leadData.x || existing.x" to ensure we don't accidentally overwrite data with nulls
+        const finalData = {
             client_id: clientId,
             customer_name: leadData.name || (existingLead ? existingLead.customer_name : null),
-            customer_phone: leadData.phone || (existingLead ? existingLead.customer_phone : null),
             customer_email: leadData.email || (existingLead ? existingLead.customer_email : null),
-            customer_address: leadData.address || (existingLead ? existingLead.customer_address : null),
+            customer_phone: leadData.phone || (existingLead ? existingLead.customer_phone : null),
             project_summary: leadData.project_summary || (existingLead ? existingLead.project_summary : null),
-            appointment_request: leadData.appointment_request || (existingLead ? existingLead.appointment_request : null),
-            preferred_method: leadData.preferred_method || "phone", 
-            quality_score: leadData.quality_score || 5,
-            ai_summary: leadData.ai_summary || null,
-            customer_images: finalCustomerImages,
-            ai_renderings: finalAiRenderings
+            // If there's a new render, use it; otherwise keep the old one
+            ai_rendering_url: leadData.new_ai_rendering || (existingLead ? existingLead.ai_rendering_url : null),
+            updated_at: new Date().toISOString()
         };
 
-        // 3. SAVE TO DB
+        let shouldNotify = false;
+
         if (existingLead) {
-            await supabase.from('leads').update(dbPayload).eq('id', existingLead.id);
-            console.log(`   ✅ Updated lead: ${dbPayload.customer_name}`);
+            // === UPDATE PATH (Existing Customer) ===
+            
+            // LOGIC: Only email if we gained NEW critical info
+            const justGotEmail = leadData.email && !existingLead.customer_email;
+            const justGotPhone = leadData.phone && !existingLead.customer_phone;
+            const justGotRender = leadData.new_ai_rendering && !existingLead.ai_rendering_url;
+
+            if (justGotEmail || justGotPhone || justGotRender) {
+                shouldNotify = true;
+                console.log(`🔔 Triggering notification: Lead added new info.`);
+            } else {
+                console.log(`🔕 Silent Update: No new contact details added.`);
+            }
+
+            const { error } = await supabase
+                .from('leads')
+                .update(finalData)
+                .eq('id', existingLead.id);
+            
+            if (error) throw error;
+
         } else {
-            await supabase.from('leads').insert([dbPayload]);
-            console.log(`   ✨ Created new lead: ${dbPayload.customer_name}`);
+            // === INSERT PATH (Brand New Customer) ===
+            shouldNotify = true; // Always notify for a brand new lead
+            
+            const { error } = await supabase
+                .from('leads')
+                .insert([finalData]);
+                
+            if (error) throw error;
+            console.log(`✅ New Lead Created: ${finalData.customer_name}`);
         }
 
-        // ============================================================
-        // 4. SEND EMAIL NOTIFICATION (With Robust Fallback)
-        // ============================================================
-        if (dbPayload.customer_phone || dbPayload.customer_email) {
-            
+        // 4. Send Email (Only if flagged)
+        if (shouldNotify) {
             const { data: client } = await supabase
                 .from('clients')
                 .select('notification_emails, email')
@@ -65,30 +86,12 @@ export async function handleLeadData(supabase, clientId, leadData) {
                 .single();
 
             if (client) {
-                let targetInput = client.notification_emails;
-                
-                // --- SAFETY CHECK START ---
-                // Determine if the field is "empty" regardless of format (String or Array)
-                let isEmpty = false;
-                if (!targetInput) isEmpty = true; // Null or undefined
-                else if (typeof targetInput === 'string' && targetInput.trim() === '') isEmpty = true; // Empty string
-                else if (Array.isArray(targetInput) && targetInput.length === 0) isEmpty = true; // Empty array
-
-                // If empty, use the main email as fallback
-                if (isEmpty) {
-                    targetInput = client.email;
-                    console.log(`   ℹ️ No notification list found. Fallback to main email: ${client.email}`);
-                }
-                // --- SAFETY CHECK END ---
-
-                if (targetInput) {
-                    // Send notification (email_handler handles both string and array inputs)
-                    sendLeadNotification(targetInput, dbPayload);
-                }
+                const recipients = client.notification_emails || client.email;
+                await sendLeadNotification(recipients, finalData);
             }
         }
 
-    } catch (e) {
-        console.error("Lead Manager System Error:", e);
+    } catch (err) {
+        console.error("❌ Lead Manager Error:", err.message);
     }
 }
