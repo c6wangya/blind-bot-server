@@ -1,53 +1,66 @@
-// stats_handler.js
+import express from 'express';
+
 export function setupStatsRoutes(app, supabase) {
-    console.log("📊 Stats Module Loaded.");
 
-    // Simple cache to prevent hammering your database
-    let cache = {
-        data: null,
-        lastFetch: 0
-    };
-    const CACHE_DURATION = 1000 * 60 * 60; // 1 Hour
+    // ==================================================
+    // 1. FIX FOR 404 LOGS (The General Health Check)
+    // ==================================================
+    // This stops the red errors in your Render logs
+    app.get('/stats', (req, res) => {
+        res.json({ status: 'ok', message: 'Stats module active' });
+    });
 
-    app.get('/public-stats', async (req, res) => {
+    // ==================================================
+    // 2. Client Stats (Specific Dashboard Data)
+    // ==================================================
+    app.get('/stats/client/:apiKey', async (req, res) => {
         try {
-            // 1. Check Cache
-            const now = Date.now();
-            if (cache.data && (now - cache.lastFetch < CACHE_DURATION)) {
-                return res.json(cache.data);
+            const { apiKey } = req.params;
+
+            // 1. Get Client ID
+            const { data: client, error: clientError } = await supabase
+                .from('clients')
+                .select('id')
+                .eq('api_key', apiKey)
+                .single();
+
+            if (clientError || !client) {
+                return res.status(404).json({ error: 'Client not found' });
             }
 
-            // 2. Fetch Real Data (Aggregate counts only)
-            // Note: count: 'exact', head: true tells Supabase to only return the number, not the data rows.
-            const { count: clientCount } = await supabase
-                .from('clients')
-                .select('*', { count: 'exact', head: true });
-
+            // 2. Fetch Aggregated Stats
+            // (Example: Count leads, image generations, etc.)
             const { count: leadCount } = await supabase
                 .from('leads')
-                .select('*', { count: 'exact', head: true });
+                .select('*', { count: 'exact', head: true })
+                .eq('client_id', client.id);
 
-            // 3. Format & Fuzz (Make it look good but realistic)
-            // e.g., if you have 5 clients, maybe show 50 (beta users) + actuals
-            const displayClients = (clientCount || 0) + 42; 
-            const displayChats = (leadCount || 0) * 15 + 1200; // Estimate: 15 chats per lead
+            const { count: chatCount } = await supabase
+                .from('chat_logs') // Assuming you track logs
+                .select('*', { count: 'exact', head: true })
+                .eq('client_id', client.id);
 
-            const stats = {
-                clients: displayClients,
-                chats: displayChats,
-                savedHours: Math.floor(displayChats * 0.2) // Assume 12 mins saved per chat
-            };
-
-            // 4. Update Cache
-            cache.data = stats;
-            cache.lastFetch = now;
-
-            res.json(stats);
+            res.json({
+                leads: leadCount || 0,
+                conversations: chatCount || 0,
+                credits: client.image_credits || 0
+            });
 
         } catch (err) {
-            console.error("Stats Error:", err);
-            // Fallback hardcoded stats if DB fails
-            res.json({ clients: 50, chats: 1500, savedHours: 300 }); 
+            console.error("Stats Error:", err.message);
+            res.status(500).json({ error: "Failed to fetch stats" });
         }
+    });
+
+    // ==================================================
+    // 3. Admin Stats (Optional - for you)
+    // ==================================================
+    app.get('/stats/admin', async (req, res) => {
+        // Simple global count
+        const { count } = await supabase
+            .from('clients')
+            .select('*', { count: 'exact', head: true });
+        
+        res.json({ total_clients: count });
     });
 }
