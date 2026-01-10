@@ -517,23 +517,43 @@ app.post('/contact-support', async (req, res) => {
             console.error("Database Insert Error:", dbError);
             throw new Error("Failed to save ticket.");
         }
-
+        console.log("Ticket saved. ID:", ticket.id);
         // 4. Send Notification Email
-        const emailHtml = `
-            <h2>New Client Ticket #${ticket.id.slice(0, 8)}</h2>
-            <p><strong>Client:</strong> ${client.company_name}</p>
-            <p><strong>Identified By:</strong> ${clientApiKey ? 'API Key' : 'Email Lookup'}</p>
-            <hr />
-            <p>${message.replace(/\n/g, '<br>')}</p>
-        `;
-
-        await resend.emails.send({
-            from: 'Client Support <onboarding@resend.dev>',
-            to: ['rob.wen@theblindbots.com'],
+        const adminEmail = await resend.emails.send({
+            from:'Client Support <help@support.theblindbots.com>', // Change to 'support@theblindbots.com' once verified
+            to: ['rob.wen@theblindbots.com'], // MUST be your verified Resend email
             reply_to: userEmail,
-            subject: `[Support] ${client.company_name} - ${topic}`,
-            html: emailHtml,
+            subject: `[New Ticket] ${client.company_name} - ${topic}`,
+            html: `
+                <h2>New Support Request</h2>
+                <p><strong>Client:</strong> ${client.company_name}</p>
+                <p><strong>Email:</strong> ${userEmail}</p>
+                <p><strong>Message:</strong><br>${message}</p>
+                <a href="https://supabase.com/dashboard">View in Supabase</a>
+            `
         });
+
+        if (adminEmail.error) console.error("Admin Email Failed:", adminEmail.error);
+        else console.log("Admin Email Sent:", adminEmail.data);
+
+        // 5. Send Client Confirmation (To THE USER)
+        // NOTE: This will ONLY work if you have verified your domain on Resend.
+        // If you are on the "onboarding" domain, this will fail for anyone except yourself.
+        const clientConfirmation = await resend.emails.send({
+            from: 'Client Support <help@support.theblindbots.com>',
+            to: [userEmail], 
+            subject: `We received your request: ${topic}`,
+            html: `
+                <p>Hi there,</p>
+                <p>We received your support request regarding <strong>${topic}</strong>.</p>
+                <p>Our team will review it and get back to you shortly.</p>
+                <hr>
+                <p><em>Your Message:</em><br>${message}</p>
+            `
+        });
+
+        if (clientConfirmation.error) console.error("Client Email Failed:", clientConfirmation.error);
+        else console.log("Client Email Sent:", clientConfirmation.data);
 
         res.json({ success: true, ticketId: ticket.id });
 
