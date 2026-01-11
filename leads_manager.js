@@ -71,6 +71,9 @@ export async function handleLeadData(supabase, clientId, leadData) {
             // --- AI Analysis ---
             quality_score: leadData.quality_score || (existingLead ? existingLead.quality_score : null),
             ai_summary: leadData.ai_summary || (existingLead ? existingLead.ai_summary : null),
+            // --- TRANSCRIPT (New Update) ---
+            // We stringify the array because the database stores it as text/json
+            full_transcript: leadData.full_transcript ? JSON.stringify(leadData.full_transcript) : (existingLead ? existingLead.full_transcript : null),
             
             // --- GALLERY (Appending Logic) ---
             customer_images: appendToGallery(

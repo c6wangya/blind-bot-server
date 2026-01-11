@@ -352,7 +352,7 @@ app.post('/chat', async (req, res) => {
         }
         if (jsonResponse.lead_data) {
             const d = jsonResponse.lead_data;
-            
+            d.full_transcript = history;
             // Inject images into the data payload
             if (sourceImageUrl) d.new_customer_image = sourceImageUrl;
             if (renderUrl) d.new_ai_rendering = renderUrl; // Defined in the scope above
