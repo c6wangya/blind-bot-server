@@ -73,6 +73,7 @@
             <label id="upload-label" for="file-input">📎</label>
             <input type="file" id="file-input" accept="image/*" onchange="uploadImage()">
             <textarea id="msg" placeholder="Type a message..." rows="1"></textarea>
+            <button id="start-over-btn" class="btn" style="background: #6c757d;" onclick="startOver()">Start Over</button>
             <button id="send-btn" class="btn" onclick="send()">Send</button>
         </div>
     </div>
@@ -195,7 +196,7 @@
             let replyHtml = data.reply.replace(/\[RENDER_URL: (.*?)\]/, (match, url) => {
                 return `<img src="${url}" class="chat-img" style="border: 2px solid #28a745;">`;
             });
-            
+
             let cardsHtml = "";
             if (data.product_suggestions && data.product_suggestions.length > 0) {
                 cardsHtml = `<div class="product-grid">`;
@@ -216,6 +217,35 @@
         } catch (err) {
             console.error(err);
         }
+    }
+
+    // --- 7. START OVER FUNCTION ---
+    function startOver() {
+        if (!confirm('Are you sure you want to start over? This will clear the entire conversation.')) {
+            return;
+        }
+
+        // Clear chat box
+        const box = document.getElementById('chat-box');
+        box.innerHTML = '';
+
+        // Reset history to initial greeting
+        history = [
+            { role: "user", parts: [{ text: "Hello" }] },
+            { role: "model", parts: [{ text: initialGreeting }] }
+        ];
+
+        // Clear staged images
+        stagedImages = [];
+        document.getElementById('preview-container').innerHTML = "";
+
+        // Clear message input
+        document.getElementById('msg').value = "";
+
+        // Show initial greeting again
+        box.innerHTML = `<div class="ai">${initialGreeting}</div>`;
+
+        console.log('Chat restarted');
     }
 </script>
 </body>
