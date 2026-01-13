@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { sendLeadNotification } from './email_handler.js';
 
 // Helper: Append new URL to existing gallery list
 function appendToGallery(existingData, newUrl) {
@@ -106,6 +107,28 @@ export async function handleLeadData(supabase, clientId, leadData) {
         }
 
         console.log("✅ Lead Saved:", data[0].id);
+
+        // 🔧 Send email notification
+        try {
+            const { data: client } = await supabase
+                .from('clients')
+                .select('notification_emails, email')
+                .eq('id', clientId)
+                .single();
+
+            if (client) {
+                const emails = client.notification_emails || client.email;
+                if (emails) {
+                    await sendLeadNotification(emails, leadData);
+                } else {
+                    console.log('⚠️ No notification emails configured for client:', clientId);
+                }
+            }
+        } catch (emailError) {
+            // Email failure should not prevent Lead from being saved
+            console.error('📧 Email notification failed:', emailError.message);
+        }
+
         return data[0];
 
     } catch (err) {

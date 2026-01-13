@@ -3,9 +3,16 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 // Initialize Resend with your API Key
-const resend = new Resend(process.env.RESEND_API_KEY);
+const resend = process.env.RESEND_API_KEY
+    ? new Resend(process.env.RESEND_API_KEY)
+    : null;
 
 export async function sendLeadNotification(toEmails, leadData) {
+    if (!resend) {
+        console.error('❌ RESEND_API_KEY not configured. Email notification skipped.');
+        return false;
+    }
+
     let recipientList = [];
 
     // 1. Clean and Format Recipients
@@ -76,5 +83,71 @@ export async function sendLeadNotification(toEmails, leadData) {
 
     } catch (err) {
         console.error("   ❌ Fatal Email Error:", err.message);
+    }
+}
+
+/**
+ * Test email configuration on server startup
+ * Sends a silent test to verify RESEND_API_KEY works
+ * @returns {Promise<boolean>} - true if test passed
+ */
+export async function testEmailConfiguration() {
+    if (!resend) {
+        console.warn('⚠️ RESEND_API_KEY not configured. Email notifications disabled.');
+        return false;
+    }
+
+    console.log('🧪 Testing email configuration...');
+
+    try {
+        // Send test to Resend's dummy address (won't actually deliver)
+        await resend.emails.send({
+            from: 'The Blinds Bot <leads@support.theblindbots.com>',
+            to: 'test@resend.dev', // Resend's official test address - accepts but doesn't deliver
+            subject: '✅ Email Service Test',
+            html: '<p>Email service is operational.</p>'
+        });
+
+        console.log('✅ Email configuration test passed. Notifications ready.');
+        return true;
+
+    } catch (err) {
+        console.error('❌ Email configuration test FAILED:', err.message);
+        console.error('   → Lead notifications will NOT work!');
+        console.error('   → Please check RESEND_API_KEY and domain verification.');
+
+        // Try to notify admin about the failure
+        const adminEmail = process.env.ADMIN_EMAIL;
+        if (adminEmail) {
+            try {
+                await resend.emails.send({
+                    from: 'The Blinds Bot <alerts@support.theblindbots.com>',
+                    to: adminEmail,
+                    subject: '🚨 Blinds Bot Email Service DOWN',
+                    html: `
+                        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 2px solid #ff6b6b; border-radius: 8px;">
+                            <h2 style="color: #ff6b6b;">⚠️ Email Service Failed to Start</h2>
+                            <p><strong>Error:</strong> ${err.message}</p>
+                            <div style="background: #fff3cd; padding: 15px; border-left: 4px solid #ffc107; margin: 20px 0;">
+                                <p><strong>Impact:</strong> Lead notifications are NOT working.</p>
+                                <p>No emails will be sent until this is resolved.</p>
+                            </div>
+                            <p><strong>Next steps:</strong></p>
+                            <ol>
+                                <li>Check RESEND_API_KEY in .env file</li>
+                                <li>Verify domain in Resend dashboard</li>
+                                <li>Check server logs for details</li>
+                                <li>Restart server after fixing</li>
+                            </ol>
+                        </div>
+                    `
+                });
+                console.log('   ✅ Alert email sent to admin:', adminEmail);
+            } catch (alertErr) {
+                console.error('   ❌ Could not send alert to admin:', alertErr.message);
+            }
+        }
+
+        return false;
     }
 }

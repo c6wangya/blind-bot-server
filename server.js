@@ -12,11 +12,12 @@ import { startProductWorker } from './product_worker.js';
 import { validateClientAccess, deductImageCredit } from './subscription_manager.js'; 
 import { startPersonaWorker, forceRetrainClient } from './persona_worker.js';
 import { setupStripeWebhook, createPortalSession } from './stripe_handler.js';
-import { handleLeadData } from './leads_manager.js'; 
+import { handleLeadData } from './leads_manager.js';
 import { setupPreviewRoutes } from './preview_handler.js';
-import { scrapeAndSaveProducts } from './product_scraper.js'; 
+import { scrapeAndSaveProducts } from './product_scraper.js';
 import { setupStatsRoutes } from './stats_handler.js';
 import { Resend } from 'resend';
+import { testEmailConfiguration } from './email_handler.js';
 
 const require = createRequire(import.meta.url);
 
@@ -359,7 +360,13 @@ app.post('/chat', async (req, res) => {
 
             // Only save if we have contact info or if we just generated valuable data
             if (d.name || d.phone || d.email) {
-                handleLeadData(supabase, client.id, d); 
+                const savedLead = await handleLeadData(supabase, client.id, d);
+
+                if (!savedLead) {
+                    // Lead save failed, notify user
+                    console.error('⚠️ Lead save failed for client:', client.id);
+                    jsonResponse.reply += "\n\n⚠️ We encountered a technical issue saving your information. Please contact us directly at: " + (client.email || "our support team") + ".";
+                }
             }
         }
         res.json(jsonResponse);
@@ -562,4 +569,9 @@ app.post('/contact-support', async (req, res) => {
         res.status(500).json({ error: "Internal Server Error" });
     }
 });
-app.listen(3000, () => console.log('🚀 Gallery Agent Running'));
+app.listen(3000, async () => {
+    console.log('🚀 Gallery Agent Running');
+
+    // Test email configuration on startup
+    await testEmailConfiguration();
+});
