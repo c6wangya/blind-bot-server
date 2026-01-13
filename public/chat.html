@@ -57,6 +57,7 @@
         textarea { flex: 1; padding: 12px 15px; border: 1px solid #e0e0e0; border-radius: 24px; outline: none; resize: none; font-family: inherit; max-height: 120px; font-size: 14px; }
         .btn { height: 42px; border: none; border-radius: 24px; cursor: pointer; font-weight: 600; color: white; background: #333; padding: 0 20px; }
         #upload-label { width: 42px; height: 42px; background: #f1f3f5; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 18px; color: #555; }
+        #start-over-btn { width: 42px; height: 42px; background: #f1f3f5; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 18px; color: #555; }
         #file-input { display: none; }
         #loader { display: none; text-align: center; font-size: 11px; color: #888; padding: 5px; }
     </style>
@@ -71,9 +72,9 @@
 
         <div class="controls">
             <label id="upload-label" for="file-input">📎</label>
+            <label id="start-over-btn" class="btn" onclick="startOver()">🔄</label>
             <input type="file" id="file-input" accept="image/*" onchange="uploadImage()">
             <textarea id="msg" placeholder="Type a message..." rows="1"></textarea>
-            <button id="start-over-btn" class="btn" style="background: #6c757d;" onclick="startOver()">Start Over</button>
             <button id="send-btn" class="btn" onclick="send()">Send</button>
         </div>
     </div>
