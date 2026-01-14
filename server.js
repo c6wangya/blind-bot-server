@@ -19,6 +19,7 @@ import { setupStatsRoutes } from './stats_handler.js';
 import { Resend } from 'resend';
 import { testEmailConfiguration } from './email_handler.js';
 import { wrapGeminiCall } from './rate_limiter.js';
+import { downloadAndConvertImage, ensureBrowserCompatible } from './image_utils.js';
 
 const require = createRequire(import.meta.url);
 
@@ -39,18 +40,8 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 // ==================================================================
 
 async function urlToGenerativePart(url) {
-    try {
-        const response = await axios.get(url, { responseType: 'arraybuffer' });
-        return {
-            inlineData: {
-                data: Buffer.from(response.data).toString('base64'),
-                mimeType: "image/jpeg"
-            }
-        };
-    } catch (e) { 
-        console.error("❌ Failed to download image for AI analysis:", e.message);
-        return null; 
-    }
+    // Use the new helper that handles HEIC/HEIF conversion
+    return await downloadAndConvertImage(url);
 }
 
 async function generateRendering(sourceImageUrl, promptText) {
@@ -450,7 +441,7 @@ app.post('/scrape-products', async (req, res) => {
 });
 app.post('/update-notification-emails', async (req, res) => {
     try {
-        const { clientApiKey, emails } = req.body; 
+        const { clientApiKey, emails } = req.body;
 
         if (!Array.isArray(emails)) return res.status(400).json({ error: "Invalid format" });
 
@@ -467,6 +458,65 @@ app.post('/update-notification-emails', async (req, res) => {
         res.status(500).json({ error: "Update failed" });
     }
 });
+
+// ==================================================================
+// IMAGE UPLOAD ENDPOINT (with HEIC/HEIF conversion)
+// ==================================================================
+app.post('/upload-image', async (req, res) => {
+    try {
+        const { imageBase64, fileName, mimeType } = req.body;
+
+        if (!imageBase64 || !fileName) {
+            return res.status(400).json({ error: "Missing image data or filename" });
+        }
+
+        // Decode base64 to buffer
+        let buffer = Buffer.from(imageBase64, 'base64');
+
+        // Check file size (max 20MB)
+        const MAX_SIZE_MB = 20;
+        const fileSizeMB = buffer.length / (1024 * 1024);
+        if (fileSizeMB > MAX_SIZE_MB) {
+            console.log(`🚫 Image too large: ${fileSizeMB.toFixed(1)}MB (max ${MAX_SIZE_MB}MB)`);
+            return res.status(413).json({
+                error: `Image is too large (${fileSizeMB.toFixed(1)}MB). Please use an image smaller than ${MAX_SIZE_MB}MB.`
+            });
+        }
+
+        // Convert HEIC/HEIF and other non-browser formats to JPEG
+        // Pass fileName for fallback detection when browser doesn't report mimeType
+        const converted = await ensureBrowserCompatible(buffer, mimeType, fileName);
+        buffer = converted.buffer;
+        let finalMimeType = converted.mimeType;
+
+        // Generate safe filename (always .jpg for converted files)
+        const ext = finalMimeType === 'image/png' ? '.png' : '.jpg';
+        const safeFileName = `uploads/${Date.now()}_${fileName.replace(/\.[^/.]+$/, '')}${ext}`;
+
+        // Upload to Supabase
+        const { error } = await supabase.storage
+            .from('chat-uploads')
+            .upload(safeFileName, buffer, { contentType: finalMimeType });
+
+        if (error) throw error;
+
+        const { data: urlData } = supabase.storage
+            .from('chat-uploads')
+            .getPublicUrl(safeFileName);
+
+        console.log(`✅ Image uploaded: ${safeFileName} (${finalMimeType})`);
+
+        res.json({
+            success: true,
+            url: urlData.publicUrl
+        });
+
+    } catch (err) {
+        console.error("Upload Error:", err.message);
+        res.status(500).json({ error: "Upload failed: " + err.message });
+    }
+});
+
 // ==================================================================
 // 5. SAAS CLIENT SUPPORT (Smart Lookup: Key OR Email)
 // ==================================================================

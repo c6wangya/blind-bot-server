@@ -57,21 +57,41 @@
         textarea { flex: 1; padding: 12px 15px; border: 1px solid #e0e0e0; border-radius: 24px; outline: none; resize: none; font-family: inherit; max-height: 120px; font-size: 14px; }
         .btn { height: 42px; border: none; border-radius: 24px; cursor: pointer; font-weight: 600; color: white; background: #333; padding: 0 20px; }
         #upload-label { width: 42px; height: 42px; background: #f1f3f5; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 18px; color: #555; }
-        #start-over-btn { width: 42px; height: 42px; background: #f1f3f5; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 18px; color: #555; }
         #file-input { display: none; }
+
+        /* Start Over button - matches Send button style */
+        #start-over-btn {
+            height: 36px;
+            border: none;
+            border-radius: 24px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 14px;
+            color: white;
+            background: rgba(255, 255, 255, 0.15);
+            padding: 0 20px;
+            transition: all 0.2s;
+            white-space: nowrap;
+            backdrop-filter: blur(10px);
+        }
+        #start-over-btn:hover {
+            background: rgba(255, 255, 255, 0.25);
+        }
         #loader { display: none; text-align: center; font-size: 11px; color: #888; padding: 5px; }
     </style>
 </head>
 <body>
 
     <div id="chat-container">
-        <div id="header" style="padding:15px; background:#333; color:white; font-weight:600;">Chat Assistant</div>
+        <div id="header" style="padding:15px; background:#333; color:white; font-weight:600; display:flex; justify-content:space-between; align-items:center;">
+            <span>Chat Assistant</span>
+            <button id="start-over-btn" onclick="startOver()">Start Over</button>
+        </div>
         <div id="chat-box"></div>
         <div id="loader">Uploading image...</div>
         <div id="preview-container"></div>
 
         <div class="controls">
-            <label id="start-over-btn" onclick="startOver()">🔄</label>
             <label id="upload-label" for="file-input">📎</label>
             <input type="file" id="file-input" accept="image/*" onchange="uploadImage()">
             <textarea id="msg" placeholder="Type a message..." rows="1"></textarea>
@@ -113,9 +133,13 @@
     const header = document.getElementById('header');
     header.style.backgroundColor = themeColor;
     document.getElementById('send-btn').style.backgroundColor = themeColor;
-    
+
     if (logoUrl && logoUrl !== "null" && logoUrl !== "") {
-        header.innerHTML = `<img src="${logoUrl}" style="height: 30px; vertical-align: middle;">`;
+        // Update only the first child (company name/logo), keep Start Over button
+        header.innerHTML = `
+            <img src="${logoUrl}" style="height: 30px; vertical-align: middle;">
+            <button id="start-over-btn" onclick="startOver()">Start Over</button>
+        `;
     }
 
     const styleSheet = document.createElement("style");
@@ -140,20 +164,52 @@
         });
     };
 
-    // --- 5. UPLOAD LOGIC ---
+    // --- 5. UPLOAD LOGIC (with HEIC/HEIF conversion on server) ---
     async function uploadImage() {
         const fileInput = document.getElementById('file-input');
         const file = fileInput.files[0];
         if (!file) return;
 
         document.getElementById('loader').style.display = 'block';
-        const fileName = `uploads/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.]/g, '')}`;
-        await supabaseclients.storage.from('chat-uploads').upload(fileName, file);
-        const { data } = supabaseclients.storage.from('chat-uploads').getPublicUrl(fileName);
-        
-        stagedImages.push(data.publicUrl);
-        document.getElementById('preview-container').innerHTML += `<div class="preview-wrapper"><img src="${data.publicUrl}" class="preview-thumb"></div>`;
-        document.getElementById('loader').style.display = 'none';
+        document.getElementById('loader').innerText = 'Processing image...';
+
+        try {
+            // Read file as base64
+            const base64 = await new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result.split(',')[1]);
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            });
+
+            // Upload via server endpoint (handles HEIC/HEIF conversion)
+            const response = await fetch(`${SERVER_URL}/upload-image`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    imageBase64: base64,
+                    fileName: file.name,
+                    mimeType: file.type
+                })
+            });
+
+            const result = await response.json();
+
+            if (!response.ok || !result.success) {
+                throw new Error(result.error || 'Upload failed');
+            }
+
+            stagedImages.push(result.url);
+            document.getElementById('preview-container').innerHTML += `<div class="preview-wrapper"><img src="${result.url}" class="preview-thumb"></div>`;
+
+        } catch (err) {
+            console.error('Upload error:', err);
+            alert('Failed to upload image: ' + err.message);
+        } finally {
+            document.getElementById('loader').style.display = 'none';
+            document.getElementById('loader').innerText = 'Uploading image...';
+            fileInput.value = ''; // Reset file input
+        }
     }
 
     // --- 6. SEND LOGIC ---
