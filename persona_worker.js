@@ -3,6 +3,8 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { createClient } from '@supabase/supabase-js';
 import axios from 'axios';
 import { wrapGeminiCall } from './rate_limiter.js';
+import { getPDFUrls } from './services/pdf/utils.js';
+import { processPDFPipeline } from './services/pdf/pipeline.js';
 
 dotenv.config();
 
@@ -60,18 +62,18 @@ export async function startPersonaWorker() {
 export async function generateClientPersona(client) {
     console.log(`   -> Processing Persona for: ${client.company_name}`);
     // Use 1.5 Flash for speed/PDFs or the model you prefer
-    const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" }); 
+    const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
 
     const inputs = [];
     const override = client.sales_prompt_override || "No specific owner instructions.";
-    
+
     const promptText = `
     You are an expert AI Sales System Architect.
-    
-    YOUR GOAL: 
+
+    YOUR GOAL:
     Read the attached document (PDF) and the Owner Instructions below.
     Write a "System Instruction" block for a Sales Chatbot.
-    
+
     OWNER INSTRUCTIONS: "${override}"
 
     RULES:
@@ -82,10 +84,34 @@ export async function generateClientPersona(client) {
     `;
     inputs.push(promptText);
 
-    // Add PDF if exists
-    if (client.training_pdf) {
-        const pdfPart = await downloadFileForGemini(client.training_pdf);
-        if (pdfPart) inputs.push(pdfPart);
+    // Get all PDF URLs (supports both training_pdf and training_pdfs)
+    const pdfUrls = getPDFUrls(client);
+
+    if (pdfUrls.length > 0) {
+        console.log(`      📚 Found ${pdfUrls.length} PDF(s) to process`);
+
+        try {
+            // Download and merge all PDFs
+            const { buffer } = await processPDFPipeline(pdfUrls, {
+                maxCount: 5,
+                maxSizeBytes: 100 * 1024 * 1024  // 100MB
+            });
+
+            // Convert merged PDF to base64 for Gemini
+            const pdfPart = {
+                inlineData: {
+                    data: buffer.toString('base64'),
+                    mimeType: "application/pdf"
+                }
+            };
+
+            inputs.push(pdfPart);
+            console.log(`      ✅ Merged PDF ready (${(buffer.length / 1024).toFixed(2)} KB)`);
+
+        } catch (err) {
+            console.error(`      ❌ PDF processing failed: ${err.message}`);
+            // Continue without PDF - use only text prompt
+        }
     }
 
     // Generate with rate limiting

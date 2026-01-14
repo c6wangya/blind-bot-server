@@ -102,9 +102,84 @@
         </div>
     </div>
 
+    <!-- M5: Color Selection Modal -->
+    <div id="color-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:1000; align-items:center; justify-content:center;">
+        <div style="background:white; border-radius:16px; width:90%; max-width:320px; padding:20px;">
+            <div style="font-weight:600; font-size:16px; margin-bottom:4px;">Select Color</div>
+            <div id="color-modal-product" style="font-size:14px; color:#333; margin-bottom:4px;"></div>
+            <div id="color-modal-current" style="font-size:12px; color:#666; margin-bottom:16px;"></div>
+            <div id="color-buttons-main" style="display:flex; flex-wrap:wrap; gap:8px;"></div>
+            <div id="color-buttons-more" style="display:none; flex-wrap:wrap; gap:8px; margin-top:8px; padding-top:8px; border-top:1px solid #eee;"></div>
+            <div style="margin-top:12px; font-size:11px; color:#999;">* May not be in stock or render accurately</div>
+            <button onclick="closeColorModal()" style="margin-top:12px; width:100%; padding:10px; border:1px solid #ddd; border-radius:8px; background:white; cursor:pointer;">Keep Current</button>
+        </div>
+    </div>
+
    <script>
     const urlParams = new URLSearchParams(window.location.search);
-    const CLIENT_API_KEY = urlParams.get('apiKey') || "YOUR_FALLBACK_TEST_KEY"; 
+    const CLIENT_API_KEY = urlParams.get('apiKey') || "YOUR_FALLBACK_TEST_KEY";
+
+    // M6: Color modal state and helpers
+    let pendingColorInfo = null;
+
+    // Helper: Escape string for use in JS/HTML attributes (handles quotes, backslashes, etc.)
+    // JSON.stringify escapes double quotes but NOT single quotes, so we must escape them manually
+    // for use in onclick='pickColor("...")' style attributes
+    function escapeForJs(str) {
+        return JSON.stringify(String(str)).slice(1, -1).replace(/'/g, "\\'");
+    }
+
+    // Helper: Create color button HTML (safe for special chars like O'White)
+    function createColorBtn(color, isCustom = false) {
+        const safeColor = escapeForJs(color);
+        const label = isCustom ? `${color} *` : color;
+        return `<button onclick="pickColor('${safeColor}')"
+            style="padding:10px 16px; border:1px solid #ddd; border-radius:8px; background:#f8f9fa; cursor:pointer; font-size:13px;">${label}</button>`;
+    }
+
+    function showColorModal(colorInfo) {
+        // colorInfo = { product_id, product_name, used_color, available_colors: [] }
+        const colors = colorInfo.available_colors || [];
+        if (colors.length === 0) return;
+
+        pendingColorInfo = colorInfo;
+        document.getElementById('color-modal-product').innerText = colorInfo.product_name;
+        document.getElementById('color-modal-current').innerText = `Current: ${colorInfo.used_color}`;
+
+        // Show first 3 colors + More + Customized
+        const mainColors = colors.slice(0, 3);
+        const moreColors = colors.slice(3);
+
+        let mainHtml = mainColors.map(c => createColorBtn(c)).join('');
+        if (moreColors.length > 0) {
+            mainHtml += `<button onclick="expandColors()" id="more-btn" style="padding:10px 16px; border:1px solid #ddd; border-radius:8px; background:#e9ecef; cursor:pointer; font-size:13px;">More...</button>`;
+        }
+        mainHtml += createColorBtn('Customized', true);
+
+        document.getElementById('color-buttons-main').innerHTML = mainHtml;
+        document.getElementById('color-buttons-more').innerHTML = moreColors.map(c => createColorBtn(c)).join('');
+        document.getElementById('color-buttons-more').style.display = 'none';
+        document.getElementById('color-modal').style.display = 'flex';
+    }
+
+    // M7: Color modal actions
+    function expandColors() {
+        document.getElementById('color-buttons-more').style.display = 'flex';
+        document.getElementById('more-btn').style.display = 'none';
+    }
+
+    function pickColor(color) {
+        if (!pendingColorInfo) return;
+        closeColorModal();
+        // Use protocol format - server recognizes this and extracts productId + color
+        const msg = `__BB_COLOR__::productId=${pendingColorInfo.product_id};color=${color}`;
+        send(msg);
+    }
+
+    function closeColorModal() {
+        document.getElementById('color-modal').style.display = 'none';
+        pendingColorInfo = null;
+    } 
     const SERVER_URL = "https://blind-bot-server.onrender.com"; 
     
     // Initialize Supabase (Keep your existing keys)
@@ -348,16 +423,28 @@
             const data = await response.json();
             document.getElementById('temp-loader').remove();
 
+            // M8: Add "Change Color" button after rendered image
+            let changeColorBtn = "";
+            if (data.color_info && data.color_info.available_colors && data.color_info.available_colors.length > 0) {
+                const colorInfoJson = escapeForJs(JSON.stringify(data.color_info));
+                changeColorBtn = `<button onclick="showColorModal(JSON.parse('${colorInfoJson}'))"
+                    style="margin-top:8px; padding:8px 16px; border:1px solid #ddd; border-radius:8px; background:#f8f9fa; cursor:pointer; font-size:13px; display:block;">
+                    Change Color
+                </button>`;
+            }
+
             let replyHtml = data.reply.replace(/\[RENDER_URL: (.*?)\]/, (match, url) => {
-                return `<img src="${url}" class="chat-img" style="border: 2px solid #28a745;">`;
+                return `<img src="${url}" class="chat-img" style="border: 2px solid #28a745;">${changeColorBtn}`;
             });
 
             let cardsHtml = "";
             if (data.product_suggestions && data.product_suggestions.length > 0) {
                 cardsHtml = `<div class="product-grid">`;
                 data.product_suggestions.forEach(prod => {
+                    // Escape product name for onclick
+                    const safeName = escapeForJs(prod.name);
                     cardsHtml += `
-                    <div class="product-card" onclick="send('${prod.name}')">
+                    <div class="product-card" onclick="send('${safeName}')">
                         <img src="${prod.image}">
                         <span>${prod.name}</span>
                     </div>`;

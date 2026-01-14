@@ -20,6 +20,7 @@ import { Resend } from 'resend';
 import { testEmailConfiguration } from './email_handler.js';
 import { wrapGeminiCall } from './rate_limiter.js';
 import { downloadAndConvertImage, ensureBrowserCompatible } from './image_utils.js';
+import { processPDFPipeline } from './services/pdf/pipeline.js';
 
 const require = createRequire(import.meta.url);
 
@@ -266,7 +267,22 @@ app.post('/chat', async (req, res) => {
         `;
 
         const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview", systemInstruction: finalSystemPrompt, generationConfig: { responseMimeType: "application/json" } });
-        
+
+        // M2: Parse color selection protocol (doesn't modify history - keeps transcript clean)
+        let userSelectedColor = null;
+        let colorProductId = null;
+        const lastMsgText = history[history.length - 1]?.parts?.[0]?.text || '';
+
+        if (lastMsgText.startsWith('__BB_COLOR__::')) {
+            const params = lastMsgText.substring('__BB_COLOR__::'.length);
+            const match = params.match(/productId=(\d+);color=(.+)/);
+            if (match) {
+                colorProductId = parseInt(match[1]);
+                userSelectedColor = match[2].trim();
+                console.log(`🎨 Color selection: productId=${colorProductId}, color=${userSelectedColor}`);
+            }
+        }
+
         // C. Parse History for Image
         const pastHistory = history.slice(0, -1);
         const chat = model.startChat({ history: pastHistory });
@@ -316,41 +332,76 @@ app.post('/chat', async (req, res) => {
         const jsonResponse = JSON.parse(result.response.text());
         
         if (jsonResponse.product_suggestions && jsonResponse.product_suggestions.length > 0 && products) {
-            jsonResponse.product_suggestions = products.map(p => ({
+            jsonResponse.product_suggestions = products.map((p, idx) => ({
                 name: p.name,
-                image: p.image_url
+                image: p.image_url,
+                id: idx,
+                // M1: Return colors as array for frontend color selector
+                colors: (p.var_colors || '').split(',').map(c => c.trim()).filter(c => c)
             }));
         } else {
             jsonResponse.product_suggestions = [];
         }
     let renderUrl = null;
-       if (jsonResponse.visualize && jsonResponse.selected_product_name && sourceImageUrl) {
-            const selectedProduct = products.find(p => p.name.toLowerCase() === jsonResponse.selected_product_name.toLowerCase());
-            
-            if (selectedProduct) {
-                // --- NEW CHARGING LOGIC ---
-                // We only charge IF we are about to generate
-                const canGenerate = await deductImageCredit(supabase, client.id);
+    let selectedProductIndex = null;
 
-                if (canGenerate) {
-                    // 1. Success: Generate the Image
-                    const desc = selectedProduct.ai_description || selectedProduct.description;
-                    const combinedPrompt = `Install ${selectedProduct.name} (${desc}) on the windows.`;
-                    
-                    console.log(`🎨 Generating with prompt: ${combinedPrompt}`);
-                    
-                    renderUrl = await generateRendering(sourceImageUrl, combinedPrompt);
-                    if (renderUrl) jsonResponse.reply += `\n\n[RENDER_URL: ${renderUrl}]`;
-                
-                } else {
-                    // 2. Failure: No Credits
-                    console.log(`🚫 Generation blocked: Insufficient credits for ${client.company_name}`);
-                    jsonResponse.reply += "\n\n(System: Preview generation skipped. Insufficient image credits. Please top up in Settings.)";
-                    // We turn off visualize so the UI doesn't try to show a broken image
-                    jsonResponse.visualize = false; 
+    // M2 continued: If color selection protocol, force visualize and use product by ID
+    if (colorProductId !== null && products && products[colorProductId]) {
+        jsonResponse.visualize = true;
+        jsonResponse.selected_product_name = products[colorProductId].name;
+    }
+
+    if (jsonResponse.visualize && jsonResponse.selected_product_name && sourceImageUrl) {
+        // Find product - prefer ID from color protocol, fallback to name matching
+        let selectedProduct;
+        if (colorProductId !== null && products && products[colorProductId]) {
+            selectedProduct = products[colorProductId];
+            selectedProductIndex = colorProductId;
+        } else {
+            selectedProduct = products.find(p => p.name.toLowerCase() === jsonResponse.selected_product_name.toLowerCase());
+            selectedProductIndex = products ? products.indexOf(selectedProduct) : null;
+        }
+
+        if (selectedProduct) {
+            // --- NEW CHARGING LOGIC ---
+            // We only charge IF we are about to generate
+            const canGenerate = await deductImageCredit(supabase, client.id);
+
+            if (canGenerate) {
+                // 1. Success: Generate the Image
+                const desc = selectedProduct.ai_description || selectedProduct.description;
+
+                // M3: Build color instruction - stronger wording for user-selected colors
+                const colorInstruction = userSelectedColor
+                    ? `IMPORTANT: Use ${userSelectedColor} color for the blinds. If the reference product image shows a different color, you MUST override it to ${userSelectedColor}.`
+                    : `Choose the most suitable color from available options: ${selectedProduct.var_colors || 'standard colors'}. Pick one that complements the room.`;
+
+                const combinedPrompt = `Install ${selectedProduct.name} (${desc}) on the windows. ${colorInstruction}`;
+
+                console.log(`🎨 Generating with prompt: ${combinedPrompt}`);
+
+                renderUrl = await generateRendering(sourceImageUrl, combinedPrompt);
+                if (renderUrl) jsonResponse.reply += `\n\n[RENDER_URL: ${renderUrl}]`;
+
+                // M4: Add color_info for "Change Color" button
+                if (renderUrl) {
+                    jsonResponse.color_info = {
+                        product_id: selectedProductIndex,
+                        product_name: selectedProduct.name,
+                        used_color: userSelectedColor || 'auto-selected',
+                        available_colors: (selectedProduct.var_colors || '').split(',').map(c => c.trim()).filter(c => c)
+                    };
                 }
+
+            } else {
+                // 2. Failure: No Credits
+                console.log(`🚫 Generation blocked: Insufficient credits for ${client.company_name}`);
+                jsonResponse.reply += "\n\n(System: Preview generation skipped. Insufficient image credits. Please top up in Settings.)";
+                // We turn off visualize so the UI doesn't try to show a broken image
+                jsonResponse.visualize = false;
             }
         }
+    }
         if (jsonResponse.lead_data) {
             const d = jsonResponse.lead_data;
             d.full_transcript = history;
@@ -516,6 +567,153 @@ app.post('/upload-image', async (req, res) => {
     } catch (err) {
         console.error("Upload Error:", err.message);
         res.status(500).json({ error: "Upload failed: " + err.message });
+    }
+});
+
+// ==================================================================
+// 4.5. TRAINING PDF UPLOAD (Multiple PDFs)
+// ==================================================================
+app.post('/upload-training-pdfs', async (req, res) => {
+    try {
+        const { apiKey, pdfFiles } = req.body;
+
+        // 1. Validate input
+        if (!apiKey) {
+            return res.status(400).json({ error: "Missing API key" });
+        }
+
+        if (!pdfFiles || !Array.isArray(pdfFiles) || pdfFiles.length === 0) {
+            return res.status(400).json({ error: "Missing PDF files or invalid format" });
+        }
+
+        // 2. Validate client exists
+        const { data: client, error: clientError } = await supabase
+            .from('clients')
+            .select('id, company_name')
+            .eq('api_key', apiKey)
+            .single();
+
+        if (clientError || !client) {
+            return res.status(404).json({ error: "Client not found" });
+        }
+
+        console.log(`📚 Processing ${pdfFiles.length} PDFs for ${client.company_name}`);
+
+        // 3. Validate PDF count (max 5)
+        if (pdfFiles.length > 5) {
+            return res.status(400).json({
+                error: `Too many PDFs. Maximum 5 allowed, received ${pdfFiles.length}`
+            });
+        }
+
+        // 4. Convert base64 PDFs to buffers
+        const pdfBuffers = [];
+        for (let i = 0; i < pdfFiles.length; i++) {
+            const { data, fileName } = pdfFiles[i];
+
+            if (!data || !fileName) {
+                return res.status(400).json({
+                    error: `PDF #${i + 1} missing data or fileName`
+                });
+            }
+
+            try {
+                const buffer = Buffer.from(data, 'base64');
+
+                // Validate PDF magic bytes
+                if (buffer.slice(0, 5).toString() !== '%PDF-') {
+                    return res.status(400).json({
+                        error: `File "${fileName}" is not a valid PDF`
+                    });
+                }
+
+                pdfBuffers.push(buffer);
+                console.log(`   ✅ Validated PDF #${i + 1}: ${fileName} (${(buffer.length / 1024).toFixed(2)} KB)`);
+
+            } catch (err) {
+                return res.status(400).json({
+                    error: `Failed to decode PDF #${i + 1}: ${err.message}`
+                });
+            }
+        }
+
+        // 5. Check total size before merging (max 100MB)
+        const totalSize = pdfBuffers.reduce((sum, buf) => sum + buf.length, 0);
+        const totalSizeMB = totalSize / (1024 * 1024);
+
+        if (totalSizeMB > 100) {
+            return res.status(413).json({
+                error: `Total PDF size ${totalSizeMB.toFixed(2)}MB exceeds 100MB limit`
+            });
+        }
+
+        console.log(`   📦 Total size: ${totalSizeMB.toFixed(2)} MB`);
+
+        // 6. Merge PDFs using our service
+        const { mergePDFsWithLimit } = await import('./services/pdf/merger.js');
+        const mergedBuffer = await mergePDFsWithLimit(pdfBuffers, 100 * 1024 * 1024);
+
+        console.log(`   ✅ Merged into single PDF: ${(mergedBuffer.length / 1024).toFixed(2)} KB`);
+
+        // 7. Upload merged PDF to Supabase Storage
+        const timestamp = Date.now();
+        const safeFileName = `training/${client.id}_${timestamp}.pdf`;
+
+        const { error: uploadError } = await supabase.storage
+            .from('chat-uploads')
+            .upload(safeFileName, mergedBuffer, {
+                contentType: 'application/pdf',
+                upsert: true
+            });
+
+        if (uploadError) {
+            throw new Error(`Upload failed: ${uploadError.message}`);
+        }
+
+        // 8. Get public URL
+        const { data: urlData } = supabase.storage
+            .from('chat-uploads')
+            .getPublicUrl(safeFileName);
+
+        console.log(`   ⬆️  Uploaded to: ${safeFileName}`);
+
+        // 9. Update client's training_pdfs array
+        // Note: We store the merged PDF URL in the array
+        const { data: currentClient } = await supabase
+            .from('clients')
+            .select('training_pdfs')
+            .eq('id', client.id)
+            .single();
+
+        const existingPdfs = currentClient?.training_pdfs || [];
+        const updatedPdfs = [...existingPdfs, urlData.publicUrl];
+
+        const { error: updateError } = await supabase
+            .from('clients')
+            .update({
+                training_pdfs: updatedPdfs,
+                bot_persona: null  // Reset persona to trigger regeneration
+            })
+            .eq('id', client.id);
+
+        if (updateError) {
+            throw new Error(`Database update failed: ${updateError.message}`);
+        }
+
+        console.log(`   💾 Updated client training_pdfs (now has ${updatedPdfs.length} PDFs)`);
+        console.log(`   🔄 Persona reset - will regenerate on next worker cycle`);
+
+        res.json({
+            success: true,
+            message: `Successfully uploaded and merged ${pdfFiles.length} PDFs`,
+            url: urlData.publicUrl,
+            totalPdfs: updatedPdfs.length,
+            mergedSizeKB: Math.round(mergedBuffer.length / 1024)
+        });
+
+    } catch (err) {
+        console.error("PDF Upload Error:", err.message);
+        res.status(500).json({ error: "PDF upload failed: " + err.message });
     }
 });
 
