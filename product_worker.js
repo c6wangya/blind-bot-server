@@ -2,6 +2,7 @@ import dotenv from 'dotenv';
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { createClient } from '@supabase/supabase-js';
 import axios from 'axios';
+import { wrapGeminiCall } from './rate_limiter.js';
 
 dotenv.config();
 
@@ -101,7 +102,7 @@ export async function startProductWorker() {
                         inputs.push(prompt);
 
                         try {
-                            const result = await model.generateContent(inputs);
+                            const result = await wrapGeminiCall(() => model.generateContent(inputs));
                             const data = JSON.parse(result.response.text());
 
                             await supabase

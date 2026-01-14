@@ -2,6 +2,7 @@ import axios from 'axios';
 import * as cheerio from 'cheerio';
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import dotenv from 'dotenv';
+import { wrapGeminiCall } from './rate_limiter.js';
 
 dotenv.config();
 
@@ -35,7 +36,7 @@ async function analyzeProductCandidate(existingProducts, newItemName, imageUrl) 
         OUTPUT FORMAT: Just one word: "INVALID", "NEW", or "ID_xxx".
         `;
 
-        const result = await model.generateContent(prompt);
+        const result = await wrapGeminiCall(() => model.generateContent(prompt));
         const text = result.response.text().trim();
 
         if (text.includes("INVALID")) return { type: 'INVALID' };

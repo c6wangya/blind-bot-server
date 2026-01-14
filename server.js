@@ -18,6 +18,7 @@ import { scrapeAndSaveProducts } from './product_scraper.js';
 import { setupStatsRoutes } from './stats_handler.js';
 import { Resend } from 'resend';
 import { testEmailConfiguration } from './email_handler.js';
+import { wrapGeminiCall } from './rate_limiter.js';
 
 const require = createRequire(import.meta.url);
 
@@ -71,8 +72,11 @@ async function generateRendering(sourceImageUrl, promptText) {
         High resolution, photorealistic, 8k.
         `;
 
-        // 4. Generate (Image-to-Image)
-        const result = await imageModel.generateContent([fullPrompt, imagePart]);
+        // 4. Generate (Image-to-Image) - with rate limiting
+        const result = await wrapGeminiCall(
+            () => imageModel.generateContent([fullPrompt, imagePart]),
+            true // High priority - user interaction
+        );
         const response = result.response;
         
         // 5. Extract Image
@@ -312,7 +316,10 @@ app.post('/chat', async (req, res) => {
              currentParts.push({ text: "Analyze this image context." });
         }
 
-        const result = await chat.sendMessage(currentParts);
+        const result = await wrapGeminiCall(
+            () => chat.sendMessage(currentParts),
+            true // High priority - user chat interaction
+        );
         const jsonResponse = JSON.parse(result.response.text());
         
         if (jsonResponse.product_suggestions && jsonResponse.product_suggestions.length > 0 && products) {

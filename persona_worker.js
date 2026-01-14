@@ -2,6 +2,7 @@ import dotenv from 'dotenv';
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { createClient } from '@supabase/supabase-js';
 import axios from 'axios';
+import { wrapGeminiCall } from './rate_limiter.js';
 
 dotenv.config();
 
@@ -87,8 +88,8 @@ export async function generateClientPersona(client) {
         if (pdfPart) inputs.push(pdfPart);
     }
 
-    // Generate
-    const result = await model.generateContent(inputs);
+    // Generate with rate limiting
+    const result = await wrapGeminiCall(() => model.generateContent(inputs));
     const generatedPersona = result.response.text();
 
     // Save to DB
