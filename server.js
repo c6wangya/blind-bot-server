@@ -689,38 +689,52 @@ app.post('/upload-training-pdfs', async (req, res) => {
 
         console.log(`   ⬆️  Uploaded to: ${safeFileName}`);
 
-        // 9. Update client's training_pdfs array
-        // Note: We store the merged PDF URL in the array
+        // 9. Update database with smart field detection
+        // Try training_pdfs first, fallback to training_pdf if it doesn't exist
         const { data: currentClient } = await supabase
             .from('clients')
-            .select('training_pdfs')
+            .select('training_pdf, training_pdfs')
             .eq('id', client.id)
             .single();
 
-        const existingPdfs = currentClient?.training_pdfs || [];
-        const updatedPdfs = [...existingPdfs, urlData.publicUrl];
+        let updatePayload = { bot_persona: null };  // Always reset persona
+        let fieldUsed = '';
+        let totalCount = 0;
+
+        // Check if training_pdfs field exists (will be null or array)
+        if ('training_pdfs' in currentClient) {
+            // Field exists - use it
+            const existingPdfs = currentClient.training_pdfs || [];
+            const updatedPdfs = [...existingPdfs, urlData.publicUrl];
+            updatePayload.training_pdfs = updatedPdfs;
+            fieldUsed = 'training_pdfs';
+            totalCount = updatedPdfs.length;
+        } else {
+            // Field doesn't exist - fallback to training_pdf
+            updatePayload.training_pdf = urlData.publicUrl;
+            fieldUsed = 'training_pdf';
+            totalCount = 1;
+        }
 
         const { error: updateError } = await supabase
             .from('clients')
-            .update({
-                training_pdfs: updatedPdfs,
-                bot_persona: null  // Reset persona to trigger regeneration
-            })
+            .update(updatePayload)
             .eq('id', client.id);
 
         if (updateError) {
             throw new Error(`Database update failed: ${updateError.message}`);
         }
 
-        console.log(`   💾 Updated client training_pdfs (now has ${updatedPdfs.length} PDFs)`);
+        console.log(`   💾 Updated client ${fieldUsed} (now has ${totalCount} PDF(s))`);
         console.log(`   🔄 Persona reset - will regenerate on next worker cycle`);
 
         res.json({
             success: true,
             message: `Successfully uploaded and merged ${pdfFiles.length} PDFs`,
             url: urlData.publicUrl,
-            totalPdfs: updatedPdfs.length,
-            mergedSizeKB: Math.round(mergedBuffer.length / 1024)
+            totalPdfs: totalCount,
+            mergedSizeKB: Math.round(mergedBuffer.length / 1024),
+            fieldUsed: fieldUsed  // For debugging
         });
 
     } catch (err) {
@@ -734,47 +748,65 @@ app.get('/training-pdfs/:apiKey', async (req, res) => {
     try {
         const { apiKey } = req.params;
 
-        // Validate client exists
-        const { data: client, error: clientError } = await supabase
+        // Try to get client - handle case where training_pdfs field may not exist
+        let client = null;
+        let clientError = null;
+
+        // First attempt: try with training_pdfs field
+        const { data: clientData1, error: error1 } = await supabase
             .from('clients')
             .select('id, company_name, training_pdf, training_pdfs')
             .eq('api_key', apiKey)
             .single();
 
+        if (error1 && error1.message && error1.message.includes('training_pdfs')) {
+            // Field doesn't exist in database, try without it
+            const { data: clientData2, error: error2 } = await supabase
+                .from('clients')
+                .select('id, company_name, training_pdf')
+                .eq('api_key', apiKey)
+                .single();
+
+            client = clientData2;
+            clientError = error2;
+        } else {
+            client = clientData1;
+            clientError = error1;
+        }
+
         if (clientError || !client) {
             return res.status(404).json({ error: "Client not found" });
         }
 
-        // Get all PDF URLs (supports both old and new fields)
-        const allUrls = [];
+        // Use getPDFUrls() for consistent fallback logic
+        const { getPDFUrls } = await import('./services/pdf/utils.js');
+        const urls = getPDFUrls(client);
 
-        // Add old single PDF if exists
-        if (client.training_pdf) {
-            allUrls.push({
-                url: client.training_pdf,
-                fileName: client.training_pdf.split('/').pop(),
-                uploadedAt: null,  // Legacy data has no timestamp
-                type: 'single'
-            });
-        }
+        // Convert URLs to response format
+        const pdfs = urls.map(url => {
+            const fileName = url.split('/').pop();
 
-        // Add new array PDFs if exists
-        if (client.training_pdfs && Array.isArray(client.training_pdfs)) {
-            client.training_pdfs.forEach(url => {
-                allUrls.push({
-                    url: url,
-                    fileName: url.split('/').pop(),
-                    uploadedAt: null,  // Can parse from filename if needed
-                    type: 'merged'
-                });
-            });
-        }
+            // Determine type based on which field is being used
+            let type = 'unknown';
+            if (client.training_pdfs && Array.isArray(client.training_pdfs) && client.training_pdfs.length > 0) {
+                type = 'merged';  // Using new array field
+            } else if (client.training_pdf) {
+                type = 'single';  // Using old single field
+            }
+
+            return {
+                url: url,
+                fileName: fileName,
+                uploadedAt: null,  // Can parse from filename if needed
+                type: type
+            };
+        });
 
         res.json({
             success: true,
             companyName: client.company_name,
-            pdfs: allUrls,
-            totalCount: allUrls.length
+            pdfs: pdfs,
+            totalCount: pdfs.length
         });
 
     } catch (err) {

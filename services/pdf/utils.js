@@ -38,23 +38,25 @@ export async function extractPDFMetadata(pdfBuffer) {
 /**
  * Get helper to retrieve PDF URLs from client record
  * Supports both old (training_pdf) and new (training_pdfs) fields
+ * Priority: training_pdfs > training_pdf (if both exist, use training_pdfs only)
  * @param {Object} client - Client record from database
  * @returns {string[]} - Array of PDF URLs (deduplicated)
  */
 export function getPDFUrls(client) {
     const urls = [];
 
-    // 1. Check new field first (training_pdfs array)
-    if (client.training_pdfs && Array.isArray(client.training_pdfs)) {
+    // Priority 1: Check new field (training_pdfs array)
+    // If this field exists and has data, use it exclusively
+    if (client.training_pdfs && Array.isArray(client.training_pdfs) && client.training_pdfs.length > 0) {
         urls.push(...client.training_pdfs);
     }
-
-    // 2. Check old field (training_pdf single URL)
-    if (client.training_pdf && typeof client.training_pdf === 'string') {
+    // Priority 2: Fallback to old field (training_pdf single URL)
+    // Only use if training_pdfs doesn't exist or is empty
+    else if (client.training_pdf && typeof client.training_pdf === 'string') {
         urls.push(client.training_pdf);
     }
 
-    // 3. Deduplicate URLs (use Set)
+    // Deduplicate URLs (use Set)
     const uniqueUrls = [...new Set(urls)];
 
     return uniqueUrls;
