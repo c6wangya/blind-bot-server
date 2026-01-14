@@ -146,90 +146,14 @@
         const file = fileInput.files[0];
         if (!file) return;
 
-        // Validate file type
-        if (!file.type.startsWith('image/')) {
-            alert('Please upload an image file');
-            return;
-        }
-
         document.getElementById('loader').style.display = 'block';
-
-        try {
-            // Convert image to JPEG format
-            const convertedBlob = await convertToJPEG(file);
-
-            // Upload as JPEG
-            const fileName = `uploads/${Date.now()}_converted.jpg`;
-            await supabaseclients.storage.from('chat-uploads').upload(fileName, convertedBlob, {
-                contentType: 'image/jpeg',
-                upsert: false
-            });
-
-            const { data } = supabaseclients.storage.from('chat-uploads').getPublicUrl(fileName);
-
-            stagedImages.push(data.publicUrl);
-            document.getElementById('preview-container').innerHTML += `<div class="preview-wrapper"><img src="${data.publicUrl}" class="preview-thumb"></div>`;
-        } catch (err) {
-            console.error('Upload error:', err);
-            alert('Failed to upload image. Please try again.');
-        } finally {
-            document.getElementById('loader').style.display = 'none';
-            fileInput.value = ''; // Reset input
-        }
-    }
-
-    // Helper function: Convert any image to JPEG
-    async function convertToJPEG(file, quality = 0.85) {
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-
-            reader.onload = (e) => {
-                const img = new Image();
-
-                img.onload = () => {
-                    // Create canvas
-                    const canvas = document.createElement('canvas');
-                    let width = img.width;
-                    let height = img.height;
-
-                    // Optional: Resize if too large (max 720px)
-                    const maxDimension = 720;
-                    if (width > maxDimension || height > maxDimension) {
-                        if (width > height) {
-                            height = (height / width) * maxDimension;
-                            width = maxDimension;
-                        } else {
-                            width = (width / height) * maxDimension;
-                            height = maxDimension;
-                        }
-                    }
-
-                    canvas.width = width;
-                    canvas.height = height;
-
-                    // Draw image on canvas
-                    const ctx = canvas.getContext('2d');
-                    ctx.fillStyle = '#FFFFFF'; // White background for transparency
-                    ctx.fillRect(0, 0, width, height);
-                    ctx.drawImage(img, 0, 0, width, height);
-
-                    // Convert to JPEG blob
-                    canvas.toBlob((blob) => {
-                        if (blob) {
-                            resolve(blob);
-                        } else {
-                            reject(new Error('Failed to convert image'));
-                        }
-                    }, 'image/jpeg', quality);
-                };
-
-                img.onerror = () => reject(new Error('Failed to load image'));
-                img.src = e.target.result;
-            };
-
-            reader.onerror = () => reject(new Error('Failed to read file'));
-            reader.readAsDataURL(file);
-        });
+        const fileName = `uploads/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.]/g, '')}`;
+        await supabaseclients.storage.from('chat-uploads').upload(fileName, file);
+        const { data } = supabaseclients.storage.from('chat-uploads').getPublicUrl(fileName);
+        
+        stagedImages.push(data.publicUrl);
+        document.getElementById('preview-container').innerHTML += `<div class="preview-wrapper"><img src="${data.publicUrl}" class="preview-thumb"></div>`;
+        document.getElementById('loader').style.display = 'none';
     }
 
     // --- 6. SEND LOGIC ---
