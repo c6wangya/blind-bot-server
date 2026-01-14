@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
-    <!-- Fallback: libheif-js for better HEIC compatibility -->
-    <script src="https://cdn.jsdelivr.net/npm/libheif-js@1.18.2/libheif-wasm/libheif.min.js"></script>
+    <!-- Fallback: libheif-js WASM bundle for better HEIC compatibility -->
+    <script src="https://cdn.jsdelivr.net/npm/libheif-js@1.19.8/libheif-wasm/libheif-bundle.js"></script>
     
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; display: flex; flex-direction: column; height: 100vh; background: transparent; }
@@ -212,7 +212,9 @@
                     try {
                         document.getElementById('loader').innerText = 'Converting HEIC (fallback)...';
                         const arrayBuffer = await file.arrayBuffer();
-                        const decoder = new libheif.HeifDecoder();
+                        // libheif-bundle exports a factory function that must be called first
+                        const libheifModule = typeof libheif === 'function' ? libheif() : libheif;
+                        const decoder = new libheifModule.HeifDecoder();
                         const data = decoder.decode(new Uint8Array(arrayBuffer));
 
                         if (data && data.length > 0) {
