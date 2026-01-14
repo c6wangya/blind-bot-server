@@ -49,11 +49,18 @@ export async function sendLeadNotification(toEmails, leadData) {
                 <h3 style="font-size: 14px; text-transform: uppercase; color: #888; border-bottom: 1px solid #eee; padding-bottom: 5px;">Project Summary</h3>
                 <p style="color: #333; line-height: 1.5;">${leadData.ai_summary || leadData.project_summary || 'No summary provided.'}</p>
             </div>
-            
+
+            ${leadData.new_customer_image ? `
+            <div style="margin-top: 20px;">
+                 <h3 style="font-size: 14px; text-transform: uppercase; color: #888; border-bottom: 1px solid #eee; padding-bottom: 5px;">📸 Customer's Room Photo</h3>
+                 <img src="${leadData.new_customer_image}" style="width: 100%; border-radius: 8px; margin-top: 10px; border: 1px solid #ddd;" alt="Customer Room Photo" />
+            </div>` : ''}
+
             ${leadData.new_ai_rendering ? `
             <div style="margin-top: 20px;">
-                 <h3 style="font-size: 14px; text-transform: uppercase; color: #888; border-bottom: 1px solid #eee; padding-bottom: 5px;">AI Rendering Generated</h3>
-                 <img src="${leadData.new_ai_rendering}" style="width: 100%; border-radius: 8px; margin-top: 10px; border: 1px solid #ddd;" alt="Room Preview" />
+                 <h3 style="font-size: 14px; text-transform: uppercase; color: #888; border-bottom: 1px solid #eee; padding-bottom: 5px;">✨ AI Preview with Product</h3>
+                 <img src="${leadData.new_ai_rendering}" style="width: 100%; border-radius: 8px; margin-top: 10px; border: 2px solid #28a745;" alt="AI Generated Preview" />
+                 <p style="font-size: 12px; color: #28a745; margin-top: 5px; text-align: center;">✨ AI-generated visualization</p>
             </div>` : ''}
         </div>
         
