@@ -424,10 +424,14 @@
             document.getElementById('temp-loader').remove();
 
             // M8: Add "Change Color" button after rendered image
+            // Store color_info globally for this response, use unique ID to avoid collisions
             let changeColorBtn = "";
             if (data.color_info && data.color_info.available_colors && data.color_info.available_colors.length > 0) {
-                const colorInfoJson = escapeForJs(JSON.stringify(data.color_info));
-                changeColorBtn = `<button onclick="showColorModal(JSON.parse('${colorInfoJson}'))"
+                // Store in a global map with unique ID, safer than embedding JSON in onclick
+                const colorInfoId = 'ci_' + Date.now();
+                window._colorInfoMap = window._colorInfoMap || {};
+                window._colorInfoMap[colorInfoId] = data.color_info;
+                changeColorBtn = `<button onclick="showColorModal(window._colorInfoMap['${colorInfoId}'])"
                     style="margin-top:8px; padding:8px 16px; border:1px solid #ddd; border-radius:8px; background:#f8f9fa; cursor:pointer; font-size:13px; display:block;">
                     Change Color
                 </button>`;
