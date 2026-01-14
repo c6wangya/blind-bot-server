@@ -57,8 +57,7 @@
         textarea { flex: 1; padding: 12px 15px; border: 1px solid #e0e0e0; border-radius: 24px; outline: none; resize: none; font-family: inherit; max-height: 120px; font-size: 14px; }
         .btn { height: 42px; border: none; border-radius: 24px; cursor: pointer; font-weight: 600; color: white; background: #333; padding: 0 20px; }
         #upload-label { width: 42px; height: 42px; background: #f1f3f5; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 18px; color: #555; }
-        #start-over-btn { width: 32px; height: 32px; background: rgba(255,255,255,0.2); border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 16px; color: white; transition: background 0.2s; }
-        #start-over-btn:hover { background: rgba(255,255,255,0.3); }
+        #start-over-btn { width: 42px; height: 42px; background: #f1f3f5; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 18px; color: #555; }
         #file-input { display: none; }
         #loader { display: none; text-align: center; font-size: 11px; color: #888; padding: 5px; }
     </style>
@@ -66,15 +65,13 @@
 <body>
 
     <div id="chat-container">
-        <div id="header" style="padding:15px; background:#333; color:white; font-weight:600; display:flex; justify-content:space-between; align-items:center;">
-            <span>Chat Assistant</span>
-            <label id="start-over-btn" onclick="startOver()">🔄</label>
-        </div>
+        <div id="header" style="padding:15px; background:#333; color:white; font-weight:600;">Chat Assistant</div>
         <div id="chat-box"></div>
         <div id="loader">Uploading image...</div>
         <div id="preview-container"></div>
 
         <div class="controls">
+            <label id="start-over-btn" onclick="startOver()">🔄</label>
             <label id="upload-label" for="file-input">📎</label>
             <input type="file" id="file-input" accept="image/*" onchange="uploadImage()">
             <textarea id="msg" placeholder="Type a message..." rows="1"></textarea>
