@@ -55,6 +55,17 @@ export async function convertToJpeg(buffer) {
             .toBuffer();
     } catch (err) {
         console.error('❌ Image conversion failed:', err.message);
+
+        // Check if it's a HEIF/HEIC support issue
+        if (err.message.includes('heif') || err.message.includes('HEIF') ||
+            err.message.includes('compression format has not been built')) {
+            const heifError = new Error(
+                'HEIC/HEIF format is not supported on this server. Please convert your image to JPEG or PNG before uploading.'
+            );
+            heifError.code = 'HEIF_NOT_SUPPORTED';
+            throw heifError;
+        }
+
         throw err;
     }
 }
@@ -161,5 +172,6 @@ export async function ensureBrowserCompatible(buffer, originalMimeType, fileName
         };
     }
 
-    return { buffer, mimeType: originalMimeType };
+    // Return detected mimeType if original was empty/invalid
+    return { buffer, mimeType: mimeType || originalMimeType };
 }
