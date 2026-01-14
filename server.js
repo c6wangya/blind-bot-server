@@ -729,6 +729,60 @@ app.post('/upload-training-pdfs', async (req, res) => {
     }
 });
 
+// Query endpoint to get training PDFs
+app.get('/training-pdfs/:apiKey', async (req, res) => {
+    try {
+        const { apiKey } = req.params;
+
+        // Validate client exists
+        const { data: client, error: clientError } = await supabase
+            .from('clients')
+            .select('id, company_name, training_pdf, training_pdfs')
+            .eq('api_key', apiKey)
+            .single();
+
+        if (clientError || !client) {
+            return res.status(404).json({ error: "Client not found" });
+        }
+
+        // Get all PDF URLs (supports both old and new fields)
+        const allUrls = [];
+
+        // Add old single PDF if exists
+        if (client.training_pdf) {
+            allUrls.push({
+                url: client.training_pdf,
+                fileName: client.training_pdf.split('/').pop(),
+                uploadedAt: null,  // Legacy data has no timestamp
+                type: 'single'
+            });
+        }
+
+        // Add new array PDFs if exists
+        if (client.training_pdfs && Array.isArray(client.training_pdfs)) {
+            client.training_pdfs.forEach(url => {
+                allUrls.push({
+                    url: url,
+                    fileName: url.split('/').pop(),
+                    uploadedAt: null,  // Can parse from filename if needed
+                    type: 'merged'
+                });
+            });
+        }
+
+        res.json({
+            success: true,
+            companyName: client.company_name,
+            pdfs: allUrls,
+            totalCount: allUrls.length
+        });
+
+    } catch (err) {
+        console.error("Query training PDFs error:", err.message);
+        res.status(500).json({ error: "Failed to query PDFs: " + err.message });
+    }
+});
+
 // ==================================================================
 // 5. SAAS CLIENT SUPPORT (Smart Lookup: Key OR Email)
 // ==================================================================

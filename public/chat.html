@@ -110,7 +110,7 @@
             <div id="color-modal-current" style="font-size:12px; color:#666; margin-bottom:16px;"></div>
             <div id="color-buttons-main" style="display:flex; flex-wrap:wrap; gap:8px;"></div>
             <div id="color-buttons-more" style="display:none; flex-wrap:wrap; gap:8px; margin-top:8px; padding-top:8px; border-top:1px solid #eee;"></div>
-            <div style="margin-top:12px; font-size:11px; color:#999;">* May not be in stock or render accurately</div>
+            <div style="margin-top:12px; font-size:11px; color:#999;">Custom colors may not be in stock or render accurately</div>
             <button onclick="closeColorModal()" style="margin-top:12px; width:100%; padding:10px; border:1px solid #ddd; border-radius:8px; background:white; cursor:pointer;">Keep Current</button>
         </div>
     </div>
@@ -130,11 +130,29 @@
     }
 
     // Helper: Create color button HTML (safe for special chars like O'White)
-    function createColorBtn(color, isCustom = false) {
+    function createColorBtn(color) {
         const safeColor = escapeForJs(color);
-        const label = isCustom ? `${color} *` : color;
         return `<button onclick="pickColor('${safeColor}')"
-            style="padding:10px 16px; border:1px solid #ddd; border-radius:8px; background:#f8f9fa; cursor:pointer; font-size:13px;">${label}</button>`;
+            style="padding:10px 16px; border:1px solid #ddd; border-radius:8px; background:#f8f9fa; cursor:pointer; font-size:13px;">${color}</button>`;
+    }
+
+    // Helper: Create custom color input HTML
+    function createCustomColorInput() {
+        return `<div id="custom-color-container" style="display:flex; gap:6px; align-items:center; width:100%; margin-top:8px;">
+            <input type="text" id="custom-color-input" placeholder="Enter color name..."
+                style="flex:1; padding:10px 12px; border:1px solid #ddd; border-radius:8px; font-size:13px; outline:none;"
+                onkeydown="if(event.key==='Enter'){submitCustomColor();}">
+            <button onclick="submitCustomColor()"
+                style="padding:10px 16px; border:none; border-radius:8px; background:#333; color:white; cursor:pointer; font-size:13px; font-weight:600;">OK</button>
+        </div>`;
+    }
+
+    function submitCustomColor() {
+        const input = document.getElementById('custom-color-input');
+        const color = input ? input.value.trim() : '';
+        if (color) {
+            pickColor(color);
+        }
     }
 
     function showColorModal(colorInfo) {
@@ -154,7 +172,8 @@
         if (moreColors.length > 0) {
             mainHtml += `<button onclick="expandColors()" id="more-btn" style="padding:10px 16px; border:1px solid #ddd; border-radius:8px; background:#e9ecef; cursor:pointer; font-size:13px;">More...</button>`;
         }
-        mainHtml += createColorBtn('Customized', true);
+        // Add custom color input instead of Customized button
+        mainHtml += createCustomColorInput();
 
         document.getElementById('color-buttons-main').innerHTML = mainHtml;
         document.getElementById('color-buttons-more').innerHTML = moreColors.map(c => createColorBtn(c)).join('');
