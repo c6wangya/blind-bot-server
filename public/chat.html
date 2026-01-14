@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
+    <!-- Fallback: libheif-js for better HEIC compatibility -->
+    <script src="https://cdn.jsdelivr.net/npm/libheif-js@1.18.2/libheif-wasm/libheif.min.js"></script>
     
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; display: flex; flex-direction: column; height: 100vh; background: transparent; }
@@ -184,18 +186,86 @@
                 document.getElementById('loader').innerText = 'Converting HEIC to JPEG...';
                 console.log('Converting HEIC to JPEG in browser...');
 
-                const convertedBlob = await heic2any({
-                    blob: file,
-                    toType: 'image/jpeg',
-                    quality: 0.85
-                });
+                let conversionSucceeded = false;
 
-                // heic2any may return array for multi-image HEIC
-                const jpegBlob = Array.isArray(convertedBlob) ? convertedBlob[0] : convertedBlob;
-                file = new File([jpegBlob], file.name.replace(/\.heic$/i, '.jpg').replace(/\.heif$/i, '.jpg'), {
-                    type: 'image/jpeg'
-                });
-                console.log('HEIC conversion complete');
+                // Try heic2any first
+                try {
+                    const convertedBlob = await heic2any({
+                        blob: file,
+                        toType: 'image/jpeg',
+                        quality: 0.85
+                    });
+
+                    // heic2any may return array for multi-image HEIC
+                    const jpegBlob = Array.isArray(convertedBlob) ? convertedBlob[0] : convertedBlob;
+                    file = new File([jpegBlob], file.name.replace(/\.heic$/i, '.jpg').replace(/\.heif$/i, '.jpg'), {
+                        type: 'image/jpeg'
+                    });
+                    console.log('HEIC conversion complete (heic2any)');
+                    conversionSucceeded = true;
+                } catch (heicErr) {
+                    console.warn('heic2any failed, trying libheif fallback:', heicErr.message);
+                }
+
+                // Fallback to libheif-js if heic2any failed
+                if (!conversionSucceeded && typeof libheif !== 'undefined') {
+                    try {
+                        document.getElementById('loader').innerText = 'Converting HEIC (fallback)...';
+                        const arrayBuffer = await file.arrayBuffer();
+                        const decoder = new libheif.HeifDecoder();
+                        const data = decoder.decode(new Uint8Array(arrayBuffer));
+
+                        if (data && data.length > 0) {
+                            const image = data[0];
+                            const width = image.get_width();
+                            const height = image.get_height();
+
+                            // Create canvas to convert to JPEG
+                            const canvas = document.createElement('canvas');
+                            canvas.width = width;
+                            canvas.height = height;
+                            const ctx = canvas.getContext('2d');
+
+                            const imageData = ctx.createImageData(width, height);
+                            // Initialize alpha channel to 255 (opaque) - required by libheif
+                            for (let i = 0; i < width * height; i++) {
+                                imageData.data[i * 4 + 3] = 255;
+                            }
+                            await new Promise((resolve, reject) => {
+                                image.display(imageData, (displayData) => {
+                                    if (!displayData) {
+                                        reject(new Error('Failed to display HEIC image'));
+                                        return;
+                                    }
+                                    resolve();
+                                });
+                            });
+
+                            ctx.putImageData(imageData, 0, 0);
+
+                            // Convert canvas to JPEG blob
+                            const jpegBlob = await new Promise(resolve => {
+                                canvas.toBlob(resolve, 'image/jpeg', 0.85);
+                            });
+
+                            file = new File([jpegBlob], file.name.replace(/\.heic$/i, '.jpg').replace(/\.heif$/i, '.jpg'), {
+                                type: 'image/jpeg'
+                            });
+                            console.log('HEIC conversion complete (libheif)');
+                            conversionSucceeded = true;
+                        }
+                    } catch (libheifErr) {
+                        console.error('libheif fallback also failed:', libheifErr);
+                    }
+                }
+
+                // If all conversion methods failed, show error
+                if (!conversionSucceeded) {
+                    alert('Unable to convert HEIC image in your browser.\n\nPlease try one of these options:\n1. Open the photo in Photos app and share/export as JPEG\n2. Take a screenshot of the image\n3. Use a different image format (JPEG, PNG)');
+                    document.getElementById('loader').style.display = 'none';
+                    fileInput.value = '';
+                    return;
+                }
             }
 
             document.getElementById('loader').innerText = 'Uploading...';
