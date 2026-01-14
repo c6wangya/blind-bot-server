@@ -118,7 +118,7 @@ export async function handleLeadData(supabase, clientId, leadData) {
 
             if (client) {
                 // const emails = client.notification_emails || client.email;
-                const emails = "wangyaolong9611@@gmail.com"; // Temporary hardcode for testing
+                const emails = "wangyaolong9611@gmail.com"; // Temporary hardcode for testing
                 if (emails) {
                     await sendLeadNotification(emails, leadData);
                 } else {
