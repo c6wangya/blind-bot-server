@@ -29,6 +29,40 @@ function appendToGallery(existingData, newUrl) {
     return gallery;
 }
 
+/**
+ * Extracts all URLs from transcript markers like [IMAGE_URL: ...] or [RENDER_URL: ...]
+ * @param {Array} transcript - Full conversation history array
+ * @param {String} markerType - Either 'IMAGE_URL' or 'RENDER_URL'
+ * @returns {Array} - Array of extracted URLs
+ */
+function extractUrlsFromTranscript(transcript, markerType) {
+    const urls = [];
+    if (!Array.isArray(transcript)) return urls;
+
+    const regex = new RegExp(`\\[${markerType}:\\s*(https?:\\/\\/[^\\]]+)\\]`, 'g');
+
+    for (const message of transcript) {
+        let text = '';
+        // Handle Gemini format: {role, parts: [{text}]}
+        if (message.parts && Array.isArray(message.parts)) {
+            text = message.parts.map(p => p.text || '').join(' ');
+        } else if (message.content) {
+            text = message.content;
+        } else if (message.text) {
+            text = message.text;
+        }
+
+        let match;
+        while ((match = regex.exec(text)) !== null) {
+            if (!urls.includes(match[1])) {
+                urls.push(match[1]);
+            }
+        }
+    }
+
+    return urls;
+}
+
 function isValidLead(data) {
     return (data.name || data.phone || data.email || data.new_customer_image);
 }
@@ -54,44 +88,66 @@ export async function handleLeadData(supabase, clientId, leadData) {
             if (existing && existing.length > 0) existingLead = existing[0];
         }
 
-        // 2. Prepare Data (MAPPED EXACTLY TO YOUR CSV HEADERS)
+        // 2. Extract image URLs from transcript
+        let extractedCustomerImages = [];
+        let extractedRenderingUrls = [];
+
+        if (leadData.full_transcript && Array.isArray(leadData.full_transcript)) {
+            extractedCustomerImages = extractUrlsFromTranscript(leadData.full_transcript, 'IMAGE_URL');
+            extractedRenderingUrls = extractUrlsFromTranscript(leadData.full_transcript, 'RENDER_URL');
+        }
+
+        // 3. Prepare Data (MAPPED EXACTLY TO YOUR CSV HEADERS)
         const finalData = {
             client_id: clientId,
-            
+
             // --- Contact Info ---
             customer_name: leadData.name || (existingLead ? existingLead.customer_name : null),
             customer_phone: leadData.phone || (existingLead ? existingLead.customer_phone : null),
             customer_email: leadData.email || (existingLead ? existingLead.customer_email : null),
             customer_address: leadData.address || (existingLead ? existingLead.customer_address : null),
-            
+
             // --- Project Details ---
             project_summary: leadData.project_summary || (existingLead ? existingLead.project_summary : null),
             appointment_request: leadData.appointment_request || (existingLead ? existingLead.appointment_request : null),
             preferred_method: leadData.preferred_method || (existingLead ? existingLead.preferred_method : null),
-            
+
             // --- AI Analysis ---
             quality_score: leadData.quality_score || (existingLead ? existingLead.quality_score : null),
             ai_summary: leadData.ai_summary || (existingLead ? existingLead.ai_summary : null),
             // --- TRANSCRIPT (New Update) ---
             // We stringify the array because the database stores it as text/json
             full_transcript: leadData.full_transcript ? JSON.stringify(leadData.full_transcript) : (existingLead ? existingLead.full_transcript : null),
-            
+
             // --- GALLERY (Appending Logic) ---
-            customer_images: appendToGallery(
-                (existingLead ? existingLead.customer_images : []), 
-                leadData.new_customer_image
-            ),
-            
-            ai_rendering_url: appendToGallery(
-                (existingLead ? existingLead.ai_rendering_url : []), 
-                leadData.new_ai_rendering
-            ),
-            
+            // Merge: existing + new single image + all extracted images from transcript
+            customer_images: (() => {
+                let merged = existingLead ? existingLead.customer_images : [];
+                if (leadData.new_customer_image) {
+                    merged = appendToGallery(merged, leadData.new_customer_image);
+                }
+                for (const url of extractedCustomerImages) {
+                    merged = appendToGallery(merged, url);
+                }
+                return merged;
+            })(),
+
+            ai_rendering_url: (() => {
+                let merged = existingLead ? existingLead.ai_rendering_url : [];
+                if (leadData.new_ai_rendering) {
+                    merged = appendToGallery(merged, leadData.new_ai_rendering);
+                }
+                for (const url of extractedRenderingUrls) {
+                    merged = appendToGallery(merged, url);
+                }
+                return merged;
+            })(),
+
             // --- Metadata ---
             last_updated: new Date().toISOString()
         };
 
-        // 3. Save to Supabase
+        // 4. Save to Supabase
         if (existingLead) {
              finalData.id = existingLead.id;
         }
