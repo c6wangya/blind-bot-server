@@ -170,9 +170,9 @@
 
     function pickColor(color) {
         if (!pendingColorInfo) return;
-        closeColorModal();
-        // Use protocol format - server recognizes this and extracts productId + color
+        // IMPORTANT: Build message BEFORE closing modal (closeColorModal clears pendingColorInfo)
         const msg = `__BB_COLOR__::productId=${pendingColorInfo.product_id};color=${color}`;
+        closeColorModal();
         send(msg);
     }
 
@@ -391,12 +391,23 @@
         if (!text && stagedImages.length === 0) return;
 
         const box = document.getElementById('chat-box');
-        
+
+        // Hide internal protocol messages from UI (but still send to server)
+        const isProtocolMsg = text && text.startsWith('__BB_COLOR__::');
+
         let displayHtml = "";
         stagedImages.forEach(url => displayHtml += `<img src="${url}" class="chat-img">`);
-        if (text) displayHtml += `<div>${text}</div>`;
-        
-        box.innerHTML += `<div class="user">${displayHtml}</div>`;
+        // For protocol messages, show user-friendly text instead
+        if (text && !isProtocolMsg) {
+            displayHtml += `<div>${text}</div>`;
+        } else if (isProtocolMsg) {
+            // Extract color name for display
+            const colorMatch = text.match(/color=(.+)$/);
+            const colorName = colorMatch ? colorMatch[1] : 'new color';
+            displayHtml += `<div>Change to ${colorName}</div>`;
+        }
+
+        if (displayHtml) box.innerHTML += `<div class="user">${displayHtml}</div>`;
         
         let backendText = text;
         stagedImages.forEach(url => backendText += ` [IMAGE_URL: ${url}]`);

@@ -293,7 +293,7 @@ app.post('/chat', async (req, res) => {
         
         // --- OBJECTIVE FIX: LOOK BACK FOR IMAGE IF NOT IN LAST TURN ---
         for (const part of lastTurn.parts) {
-            const imgMatch = part.text.match(/\[IMAGE_URL: (.*?)\]/);
+            const imgMatch = part.text?.match(/\[IMAGE_URL: (.*?)\]/);
             if (imgMatch) sourceImageUrl = imgMatch[1];
         }
 
@@ -302,7 +302,7 @@ app.post('/chat', async (req, res) => {
                 const turn = history[i];
                 if (turn.role === 'user') {
                     for (const part of turn.parts) {
-                        const imgMatch = part.text.match(/\[IMAGE_URL: (.*?)\]/);
+                        const imgMatch = part.text?.match(/\[IMAGE_URL: (.*?)\]/);
                         if (imgMatch) {
                             sourceImageUrl = imgMatch[1];
                             break;
@@ -312,10 +312,22 @@ app.post('/chat', async (req, res) => {
                 if (sourceImageUrl) break;
             }
         }
+        // DEBUG: Log image search results for color protocol
+        if (colorProductId !== null) {
+            console.log(`🔍 Color protocol detected: productId=${colorProductId}, color=${userSelectedColor}`);
+            console.log(`🔍 sourceImageUrl found: ${sourceImageUrl ? 'YES' : 'NO'}`);
+            if (!sourceImageUrl) {
+                console.log(`⚠️ No source image found! History (${history.length} turns):`);
+                history.forEach((h, i) => {
+                    const preview = h.parts?.[0]?.text?.substring(0, 80) || '[no text]';
+                    console.log(`  [${i}] ${h.role}: ${preview}...`);
+                });
+            }
+        }
         // -------------------------------------------------------------
 
         for (const part of lastTurn.parts) {
-             if (!part.text.includes('[IMAGE_URL:')) {
+             if (part.text && !part.text.includes('[IMAGE_URL:')) {
                   currentParts.push({ text: part.text });
              }
         }
