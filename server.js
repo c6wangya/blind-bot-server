@@ -60,6 +60,8 @@ async function generateRendering(sourceImageUrl, promptText) {
         Turn this room image into a professional interior design photo.
         Apply the following window treatment strictly: ${promptText}.
         Keep the original room layout, furniture, and lighting.
+        If a fireplace is clearly visible in the original image, add a subtle, realistic fire with soft flames and warm glow.
+        If no fireplace is visible, do NOT add any flames, fire, or extra light sources.
         High resolution, photorealistic, 8k.
         `;
 
