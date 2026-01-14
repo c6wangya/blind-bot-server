@@ -146,12 +146,9 @@
         const file = fileInput.files[0];
         if (!file) return;
 
-        console.log('📤 Upload started:', file.name, file.type, Math.round(file.size/1024) + 'KB');
-
         // Validate file type
         if (!file.type.startsWith('image/')) {
             alert('Please upload an image file');
-            console.error('❌ Invalid file type:', file.type);
             return;
         }
 
@@ -159,36 +156,22 @@
 
         try {
             // Convert image to JPEG format
-            console.log('🔄 Starting conversion to JPEG...');
             const convertedBlob = await convertToJPEG(file);
-            console.log('✅ Conversion complete:', Math.round(convertedBlob.size/1024) + 'KB');
 
             // Upload as JPEG
             const fileName = `uploads/${Date.now()}_converted.jpg`;
-            console.log('☁️ Uploading to Supabase:', fileName);
+            await supabaseclients.storage.from('chat-uploads').upload(fileName, convertedBlob, {
+                contentType: 'image/jpeg',
+                upsert: false
+            });
 
-            const { data, error: uploadError } = await supabaseclients.storage
-                .from('chat-uploads')
-                .upload(fileName, convertedBlob, {
-                    contentType: 'image/jpeg',
-                    upsert: false
-                });
+            const { data } = supabaseclients.storage.from('chat-uploads').getPublicUrl(fileName);
 
-            if (uploadError) {
-                console.error('❌ Supabase upload error:', uploadError);
-                throw new Error('Upload failed: ' + uploadError.message);
-            }
-
-            const { data: urlData } = supabaseclients.storage.from('chat-uploads').getPublicUrl(fileName);
-            console.log('✅ Upload successful:', urlData.publicUrl);
-
-            stagedImages.push(urlData.publicUrl);
-            document.getElementById('preview-container').innerHTML += `<div class="preview-wrapper"><img src="${urlData.publicUrl}" class="preview-thumb"></div>`;
-
+            stagedImages.push(data.publicUrl);
+            document.getElementById('preview-container').innerHTML += `<div class="preview-wrapper"><img src="${data.publicUrl}" class="preview-thumb"></div>`;
         } catch (err) {
-            console.error('❌ Upload failed:', err);
-            console.error('Error stack:', err.stack);
-            alert('Failed to upload image: ' + (err.message || 'Unknown error'));
+            console.error('Upload error:', err);
+            alert('Failed to upload image. Please try again.');
         } finally {
             document.getElementById('loader').style.display = 'none';
             fileInput.value = ''; // Reset input
@@ -198,80 +181,53 @@
     // Helper function: Convert any image to JPEG
     async function convertToJPEG(file, quality = 0.85) {
         return new Promise((resolve, reject) => {
-            console.log('🔄 convertToJPEG: Reading file...');
             const reader = new FileReader();
 
             reader.onload = (e) => {
-                console.log('✅ File read complete, loading image...');
                 const img = new Image();
 
                 img.onload = () => {
-                    try {
-                        console.log(`✅ Image loaded: ${img.width}x${img.height}`);
+                    // Create canvas
+                    const canvas = document.createElement('canvas');
+                    let width = img.width;
+                    let height = img.height;
 
-                        // Create canvas
-                        const canvas = document.createElement('canvas');
-                        let width = img.width;
-                        let height = img.height;
-
-                        // Optional: Resize if too large (max 1920px for better quality)
-                        const maxDimension = 720;
-                        if (width > maxDimension || height > maxDimension) {
-                            console.log(`📏 Resizing from ${width}x${height}`);
-                            if (width > height) {
-                                height = Math.round((height / width) * maxDimension);
-                                width = maxDimension;
-                            } else {
-                                width = Math.round((width / height) * maxDimension);
-                                height = maxDimension;
-                            }
-                            console.log(`📏 Resized to: ${width}x${height}`);
+                    // Optional: Resize if too large (max 720px)
+                    const maxDimension = 720;
+                    if (width > maxDimension || height > maxDimension) {
+                        if (width > height) {
+                            height = (height / width) * maxDimension;
+                            width = maxDimension;
+                        } else {
+                            width = (width / height) * maxDimension;
+                            height = maxDimension;
                         }
-
-                        canvas.width = width;
-                        canvas.height = height;
-
-                        // Draw image on canvas
-                        const ctx = canvas.getContext('2d');
-                        if (!ctx) {
-                            throw new Error('Failed to get 2D context from canvas');
-                        }
-
-                        ctx.fillStyle = '#FFFFFF'; // White background for transparency
-                        ctx.fillRect(0, 0, width, height);
-                        ctx.drawImage(img, 0, 0, width, height);
-
-                        console.log('🎨 Image drawn on canvas, converting to blob...');
-
-                        // Convert to JPEG blob
-                        canvas.toBlob((blob) => {
-                            if (blob) {
-                                console.log('✅ Blob created successfully:', Math.round(blob.size/1024) + 'KB');
-                                resolve(blob);
-                            } else {
-                                reject(new Error('canvas.toBlob returned null - browser may not support JPEG conversion'));
-                            }
-                        }, 'image/jpeg', quality);
-
-                    } catch (err) {
-                        console.error('❌ Error during conversion:', err);
-                        reject(err);
                     }
+
+                    canvas.width = width;
+                    canvas.height = height;
+
+                    // Draw image on canvas
+                    const ctx = canvas.getContext('2d');
+                    ctx.fillStyle = '#FFFFFF'; // White background for transparency
+                    ctx.fillRect(0, 0, width, height);
+                    ctx.drawImage(img, 0, 0, width, height);
+
+                    // Convert to JPEG blob
+                    canvas.toBlob((blob) => {
+                        if (blob) {
+                            resolve(blob);
+                        } else {
+                            reject(new Error('Failed to convert image'));
+                        }
+                    }, 'image/jpeg', quality);
                 };
 
-                img.onerror = (err) => {
-                    console.error('❌ Failed to load image:', err);
-                    reject(new Error('Failed to load image - file may be corrupted or in unsupported format'));
-                };
-
+                img.onerror = () => reject(new Error('Failed to load image'));
                 img.src = e.target.result;
             };
 
-            reader.onerror = (err) => {
-                console.error('❌ FileReader error:', err);
-                reject(new Error('Failed to read file - file may be corrupted'));
-            };
-
+            reader.onerror = () => reject(new Error('Failed to read file'));
             reader.readAsDataURL(file);
         });
     }
