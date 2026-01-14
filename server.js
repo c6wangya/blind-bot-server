@@ -691,18 +691,41 @@ app.post('/upload-training-pdfs', async (req, res) => {
 
         // 9. Update database with smart field detection
         // Try training_pdfs first, fallback to training_pdf if it doesn't exist
-        const { data: currentClient } = await supabase
+        let currentClient = null;
+        let clientQueryError = null;
+
+        // First attempt: try with training_pdfs
+        const { data: clientData1, error: error1 } = await supabase
             .from('clients')
             .select('training_pdf, training_pdfs')
             .eq('id', client.id)
             .single();
+
+        if (error1 && error1.message && error1.message.includes('training_pdfs')) {
+            // Field doesn't exist, query without it
+            const { data: clientData2, error: error2 } = await supabase
+                .from('clients')
+                .select('training_pdf')
+                .eq('id', client.id)
+                .single();
+
+            currentClient = clientData2;
+            clientQueryError = error2;
+        } else {
+            currentClient = clientData1;
+            clientQueryError = error1;
+        }
+
+        if (clientQueryError || !currentClient) {
+            throw new Error(`Failed to query current client: ${clientQueryError?.message || 'Client not found'}`);
+        }
 
         let updatePayload = { bot_persona: null };  // Always reset persona
         let fieldUsed = '';
         let totalCount = 0;
 
         // Check if training_pdfs field exists (will be null or array)
-        if ('training_pdfs' in currentClient) {
+        if (currentClient && 'training_pdfs' in currentClient) {
             // Field exists - use it
             const existingPdfs = currentClient.training_pdfs || [];
             const updatedPdfs = [...existingPdfs, urlData.publicUrl];
