@@ -29,6 +29,12 @@ export async function sendLeadNotification(toEmails, leadData) {
 
     console.log(`📧 Sending Resend Notification to: ${recipientList.join(', ')}`);
 
+    // 🔍 DEBUG: Log what images we have
+    console.log('🖼️ Image data in leadData:');
+    console.log('   - Customer image:', leadData.new_customer_image || 'NONE');
+    console.log('   - AI rendering:', leadData.new_ai_rendering || 'NONE');
+    console.log('   - Full leadData keys:', Object.keys(leadData));
+
     // 2. Construct HTML (Cleaner Layout)
     const htmlBody = `
     <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 12px; overflow: hidden;">
@@ -55,7 +61,7 @@ export async function sendLeadNotification(toEmails, leadData) {
                  <h3 style="font-size: 14px; text-transform: uppercase; color: #888; border-bottom: 1px solid #eee; padding-bottom: 5px;">📸 Customer's Room Photo</h3>
                  <img src="${leadData.new_customer_image}" style="width: 100%; border-radius: 8px; margin-top: 10px; border: 1px solid #ddd;" alt="Customer Room Photo" />
             </div>` : ''}
-
+            
             ${leadData.new_ai_rendering ? `
             <div style="margin-top: 20px;">
                  <h3 style="font-size: 14px; text-transform: uppercase; color: #888; border-bottom: 1px solid #eee; padding-bottom: 5px;">✨ AI Preview with Product</h3>

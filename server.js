@@ -358,6 +358,13 @@ app.post('/chat', async (req, res) => {
             if (sourceImageUrl) d.new_customer_image = sourceImageUrl;
             if (renderUrl) d.new_ai_rendering = renderUrl; // Defined in the scope above
 
+            // 🔍 DEBUG: Log what we're sending to handleLeadData
+            console.log('📦 Lead data being sent to handleLeadData:');
+            console.log('   - sourceImageUrl:', sourceImageUrl || 'NONE');
+            console.log('   - renderUrl:', renderUrl || 'NONE');
+            console.log('   - d.new_customer_image:', d.new_customer_image || 'NONE');
+            console.log('   - d.new_ai_rendering:', d.new_ai_rendering || 'NONE');
+
             // Only save if we have contact info or if we just generated valuable data
             if (d.name || d.phone || d.email) {
                 const savedLead = await handleLeadData(supabase, client.id, d);
