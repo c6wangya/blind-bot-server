@@ -19,9 +19,10 @@
 
     function initBot(config) {
         // Defaults if missing
+        const isMobile = window.innerWidth <= 768;
         const align = config.alignment || 'right';
         const sideGap = (config.sideMargin !== undefined) ? config.sideMargin : 20;
-        const bottomGap = (config.bottomMargin !== undefined) ? config.bottomMargin : 20;
+        const bottomGap = (config.bottomMargin !== undefined) ? config.bottomMargin : (isMobile ? 100 : 20);
         const chatHeight = (config.height !== undefined) ? config.height : 600;
 
         // 1. Create Container
@@ -43,7 +44,7 @@
 
         // 2. Chat Window (Iframe)
         const iframeBox = document.createElement('div');
-        iframeBox.style.width = '360px';
+        iframeBox.style.width = 'min(360px, calc(100vw - 40px))';
         iframeBox.style.height = `${chatHeight}px`; // Dynamic Height
         iframeBox.style.marginBottom = '15px';
         iframeBox.style.borderRadius = '12px';
