@@ -679,8 +679,19 @@
         // Create AbortController for this request
         currentAbortController = new AbortController();
 
-        // Start state machine progress
-        startRenderProgress(loader);
+        // Check if this might trigger image generation (has image in history)
+        // Image generation uses gemini-3-pro-image-preview (10-20s), regular chat uses flash (2-5s)
+        const lastUserMsg = history.length > 0 ? history[history.length - 1] : null;
+        const hasImageInHistory = history.some(h => h.parts && h.parts[0] && h.parts[0].text && h.parts[0].text.includes('[IMAGE_URL:'));
+        const mightRender = hasImageInHistory && lastUserMsg && lastUserMsg.role === 'user';
+
+        if (mightRender) {
+            // Use state machine for potential rendering (10-20s)
+            startRenderProgress(loader);
+        } else {
+            // Simple loader for regular chat (2-5s)
+            loader.innerText = 'Thinking...';
+        }
         box.scrollTop = box.scrollHeight;
 
         try {

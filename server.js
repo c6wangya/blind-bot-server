@@ -19,7 +19,7 @@ import { setupStatsRoutes } from './stats_handler.js';
 import { Resend } from 'resend';
 import { testEmailConfiguration } from './email_handler.js';
 import { wrapGeminiCall } from './rate_limiter.js';
-import { downloadAndConvertImage, ensureBrowserCompatible } from './image_utils.js';
+import { downloadAndConvertImage, ensureBrowserCompatible, compressForRendering } from './image_utils.js';
 import { processPDFPipeline } from './services/pdf/pipeline.js';
 
 const require = createRequire(import.meta.url);
@@ -579,6 +579,57 @@ app.post('/upload-image', async (req, res) => {
     } catch (err) {
         console.error("Upload Error:", err.message);
         res.status(500).json({ error: "Upload failed: " + err.message });
+    }
+});
+
+// ==================================================================
+// TEST ENDPOINT: compressForRendering (for unittest HTML page)
+// ==================================================================
+app.post('/compress-for-rendering-test', async (req, res) => {
+    try {
+        const { imageBase64, fileName, mimeType } = req.body;
+
+        if (!imageBase64) {
+            return res.status(400).json({ error: "Missing image data" });
+        }
+
+        // Decode base64 to buffer
+        let buffer = Buffer.from(imageBase64, 'base64');
+        const originalSize = buffer.length;
+
+        // First convert HEIC/HEIF if needed (using ensureBrowserCompatible)
+        const converted = await ensureBrowserCompatible(buffer, mimeType, fileName);
+        buffer = converted.buffer;
+        const afterConvertSize = buffer.length;
+
+        // Get original dimensions using sharp
+        const originalMeta = await sharp(buffer).metadata();
+
+        // Apply compressForRendering
+        const compressedBuffer = await compressForRendering(buffer);
+        const compressedMeta = await sharp(compressedBuffer).metadata();
+
+        res.json({
+            success: true,
+            original: {
+                width: originalMeta.width,
+                height: originalMeta.height,
+                size: afterConvertSize,
+                format: originalMeta.format
+            },
+            compressed: {
+                width: compressedMeta.width,
+                height: compressedMeta.height,
+                size: compressedBuffer.length,
+                format: compressedMeta.format,
+                base64: compressedBuffer.toString('base64')
+            },
+            heicConverted: mimeType?.includes('heic') || mimeType?.includes('heif') || fileName?.toLowerCase().includes('.heic')
+        });
+
+    } catch (err) {
+        console.error("compressForRendering test error:", err.message);
+        res.status(500).json({ error: err.message });
     }
 });
 

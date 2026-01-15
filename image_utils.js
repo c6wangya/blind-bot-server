@@ -1,5 +1,6 @@
 import sharp from 'sharp';
 import axios from 'axios';
+import convert from 'heic-convert';
 
 /**
  * Configuration constants
@@ -19,6 +20,40 @@ const BROWSER_SAFE_FORMATS = ['image/jpeg', 'image/png', 'image/gif', 'image/web
  * Formats that need conversion (Apple HEIC, etc.)
  */
 const NEEDS_CONVERSION = ['image/heic', 'image/heif', 'image/avif'];
+
+/**
+ * Check if buffer is HEIC/HEIF format by magic bytes
+ * HEIC files start with ftyp box containing 'heic', 'heix', 'mif1', etc.
+ * @param {Buffer} buffer - Image buffer
+ * @returns {boolean}
+ */
+function isHeicBuffer(buffer) {
+    if (!buffer || buffer.length < 12) return false;
+
+    // Check for ftyp box (starts at byte 4)
+    const ftyp = buffer.slice(4, 8).toString('ascii');
+    if (ftyp !== 'ftyp') return false;
+
+    // Check brand (bytes 8-12)
+    const brand = buffer.slice(8, 12).toString('ascii');
+    const heicBrands = ['heic', 'heix', 'hevc', 'hevx', 'mif1', 'msf1', 'avif'];
+    return heicBrands.some(b => brand.includes(b));
+}
+
+/**
+ * Convert HEIC/HEIF buffer to JPEG using heic-convert (pure JS)
+ * @param {Buffer} buffer - HEIC image buffer
+ * @returns {Promise<Buffer>} - JPEG buffer
+ */
+async function convertHeicToJpeg(buffer) {
+    console.log('   🍎 Converting HEIC using heic-convert...');
+    const outputBuffer = await convert({
+        buffer: buffer,
+        format: 'JPEG',
+        quality: CONFIG.JPEG_QUALITY / 100  // heic-convert uses 0-1 scale
+    });
+    return Buffer.from(outputBuffer);
+}
 
 /**
  * Detect mimeType from URL extension
@@ -44,19 +79,34 @@ export function detectMimeType(url) {
 
 /**
  * Convert image buffer to JPEG using sharp
- * Works with HEIC, HEIF, AVIF, PNG, WebP, etc.
+ * For HEIC/HEIF, uses heic-convert first (pure JS, no native deps)
  * @param {Buffer} buffer - Original image buffer
+ * @param {string} [mimeType] - Optional mime type hint
  * @returns {Promise<Buffer>} - JPEG buffer
  */
-export async function convertToJpeg(buffer) {
+export async function convertToJpeg(buffer, mimeType = null) {
     try {
+        // Check if it's HEIC/HEIF - use heic-convert first
+        const isHeic = isHeicBuffer(buffer) ||
+            (mimeType && (mimeType.includes('heic') || mimeType.includes('heif')));
+
+        if (isHeic) {
+            // Use pure JS heic-convert library
+            const jpegBuffer = await convertHeicToJpeg(buffer);
+            // Optionally run through sharp for consistent quality/metadata handling
+            return await sharp(jpegBuffer)
+                .jpeg({ quality: CONFIG.JPEG_QUALITY })
+                .toBuffer();
+        }
+
+        // For other formats, use sharp directly
         return await sharp(buffer)
             .jpeg({ quality: CONFIG.JPEG_QUALITY })
             .toBuffer();
     } catch (err) {
         console.error('❌ Image conversion failed:', err.message);
 
-        // Check if it's a HEIF/HEIC support issue
+        // Check if it's a HEIF/HEIC support issue (fallback error)
         if (err.message.includes('heif') || err.message.includes('HEIF') ||
             err.message.includes('compression format has not been built')) {
             const heifError = new Error(
@@ -165,7 +215,7 @@ export async function ensureBrowserCompatible(buffer, originalMimeType, fileName
 
     if (NEEDS_CONVERSION.includes(mimeType) || !BROWSER_SAFE_FORMATS.includes(mimeType)) {
         console.log(`   🔄 Converting ${mimeType} to JPEG for browser compatibility...`);
-        const jpegBuffer = await convertToJpeg(buffer);
+        const jpegBuffer = await convertToJpeg(buffer, mimeType);
         return {
             buffer: jpegBuffer,
             mimeType: 'image/jpeg'
@@ -174,4 +224,43 @@ export async function ensureBrowserCompatible(buffer, originalMimeType, fileName
 
     // Return detected mimeType if original was empty/invalid
     return { buffer, mimeType: mimeType || originalMimeType };
+}
+
+/**
+ * Compress image for rendering - resize large images and convert to JPEG
+ * Used before sending to Gemini for image generation to reduce processing time
+ * @param {Buffer} imageBuffer - Original image buffer
+ * @returns {Promise<Buffer>} - Compressed JPEG buffer (or original on error)
+ */
+export async function compressForRendering(imageBuffer) {
+    const maxDimension = 1536;
+
+    try {
+        const metadata = await sharp(imageBuffer).metadata();
+
+        // Check if resize is needed
+        const needsResize = metadata.width > maxDimension || metadata.height > maxDimension;
+
+        let pipeline = sharp(imageBuffer);
+
+        if (needsResize) {
+            console.log(`   📐 Resizing image from ${metadata.width}x${metadata.height} to max ${maxDimension}px...`);
+            pipeline = pipeline.resize(maxDimension, maxDimension, {
+                fit: 'inside',           // Keep aspect ratio, long edge = maxDimension
+                withoutEnlargement: true // Don't upscale small images
+            });
+        }
+
+        const result = await pipeline
+            .jpeg({ quality: CONFIG.JPEG_QUALITY })
+            .toBuffer();
+
+        console.log(`   ✅ Compressed: ${(imageBuffer.length / 1024).toFixed(0)}KB → ${(result.length / 1024).toFixed(0)}KB`);
+        return result;
+
+    } catch (err) {
+        console.error('❌ compressForRendering failed:', err.message);
+        // Return original buffer on error (graceful fallback)
+        return imageBuffer;
+    }
 }
