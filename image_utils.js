@@ -7,8 +7,7 @@ import axios from 'axios';
 const CONFIG = {
     DOWNLOAD_TIMEOUT_MS: 30000,     // 30 seconds max for download
     MAX_IMAGE_SIZE_MB: 20,          // 20MB max image size
-    JPEG_QUALITY: 85,               // JPEG compression quality
-    RENDER_MAX_DIMENSION: 1536      // Max dimension for rendering (long edge)
+    JPEG_QUALITY: 85                // JPEG compression quality
 };
 
 /**
@@ -52,7 +51,6 @@ export function detectMimeType(url) {
 export async function convertToJpeg(buffer) {
     try {
         return await sharp(buffer)
-            .rotate()  // Auto-apply EXIF orientation (iPhone photos)
             .jpeg({ quality: CONFIG.JPEG_QUALITY })
             .toBuffer();
     } catch (err) {
@@ -176,35 +174,4 @@ export async function ensureBrowserCompatible(buffer, originalMimeType, fileName
 
     // Return detected mimeType if original was empty/invalid
     return { buffer, mimeType: mimeType || originalMimeType };
-}
-
-/**
- * Compress image for AI rendering (resize long edge to 1536px max)
- * Reduces upload time and processing time without losing quality
- * @param {Buffer} buffer - Original image buffer
- * @returns {Promise<Buffer>} - Compressed JPEG buffer
- */
-export async function compressForRendering(buffer) {
-    try {
-        const metadata = await sharp(buffer).metadata();
-        const maxDim = CONFIG.RENDER_MAX_DIMENSION;
-
-        const needsResize = metadata.width > maxDim || metadata.height > maxDim;
-
-        // .rotate() with no args auto-applies EXIF orientation (critical for iPhone photos)
-        let pipeline = sharp(buffer).rotate();
-
-        if (needsResize) {
-            console.log(`   📐 Resizing from ${metadata.width}x${metadata.height} to max ${maxDim}px...`);
-            pipeline = pipeline.resize(maxDim, maxDim, {
-                fit: 'inside',
-                withoutEnlargement: true
-            });
-        }
-
-        return await pipeline.jpeg({ quality: CONFIG.JPEG_QUALITY }).toBuffer();
-    } catch (err) {
-        console.error('   ❌ Image compression failed, using original:', err.message);
-        return buffer;
-    }
 }
