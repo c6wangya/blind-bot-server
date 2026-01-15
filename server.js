@@ -48,23 +48,13 @@ async function urlToGenerativePart(url) {
 async function generateRendering(sourceImageUrl, promptText) {
     try {
         console.log("🎨 Generating with Nano Banana Pro (Gemini 3 Pro Image)...");
-
+        
         // 1. Prepare the model (Nano Banana Pro)
         const imageModel = genAI.getGenerativeModel({ model: "gemini-3-pro-image-preview" });
-
+        
         // 2. Download the room image
         const imagePart = await urlToGenerativePart(sourceImageUrl);
         if (!imagePart) throw new Error("Could not download source image.");
-
-        // 2.5 Compress image for faster processing (max 1536px)
-        const originalBuffer = Buffer.from(imagePart.inlineData.data, 'base64');
-        const compressedBuffer = await compressForRendering(originalBuffer);
-        const compressedImagePart = {
-            inlineData: {
-                data: compressedBuffer.toString('base64'),
-                mimeType: 'image/jpeg'
-            }
-        };
 
         // 3. Construct Prompt
         const fullPrompt = `
@@ -78,7 +68,7 @@ async function generateRendering(sourceImageUrl, promptText) {
 
         // 4. Generate (Image-to-Image) - with rate limiting
         const result = await wrapGeminiCall(
-            () => imageModel.generateContent([fullPrompt, compressedImagePart]),
+            () => imageModel.generateContent([fullPrompt, imagePart]),
             true // High priority - user interaction
         );
         const response = result.response;
