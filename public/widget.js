@@ -44,7 +44,7 @@
 
         // 2. Chat Window (Iframe)
         const iframeBox = document.createElement('div');
-        iframeBox.style.width = 'min(360px, calc(100vw - 40px))';
+        iframeBox.style.width = isMobile ? 'calc(100vw - 40px)' : '360px';
         iframeBox.style.height = `${chatHeight}px`; // Dynamic Height
         iframeBox.style.marginBottom = '15px';
         iframeBox.style.borderRadius = '12px';
