@@ -17,7 +17,8 @@
         /* BUBBLES */
         .user { background: #333; color: white; padding: 12px 16px; border-radius: 18px 18px 0 18px; align-self: flex-end; max-width: 80%; }
         .ai { background: #e9ecef; color: #2d3436; padding: 12px 16px; border-radius: 18px 18px 18px 0; align-self: flex-start; max-width: 80%; }
-        .chat-img { max-width: 200px; border-radius: 12px; margin-top: 8px; display: block; border: 2px solid rgba(255,255,255,0.3); }
+        .chat-img { max-width: 200px; border-radius: 12px; margin-top: 8px; display: block; border: 2px solid rgba(255,255,255,0.3); cursor: pointer; transition: transform 0.2s; }
+        .chat-img:hover { transform: scale(1.05); }
 
         /* PREVIEW AREA */
         #preview-container { display: flex; gap: 10px; padding: 0 15px; background: white; transition: all 0.2s; }
@@ -81,6 +82,61 @@
             background: rgba(255, 255, 255, 0.25);
         }
         #loader { display: none; text-align: center; font-size: 11px; color: #888; padding: 5px; }
+
+        /* IMAGE LIGHTBOX POPUP */
+        #image-lightbox {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            z-index: 9999;
+            justify-content: center;
+            align-items: center;
+            animation: fadeIn 0.2s ease-in-out;
+        }
+        #image-lightbox.show {
+            display: flex;
+        }
+        #lightbox-img {
+            max-width: 90%;
+            max-height: 90%;
+            border-radius: 8px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+            animation: zoomIn 0.3s ease-in-out;
+        }
+        #lightbox-close {
+            position: absolute;
+            top: 20px;
+            right: 30px;
+            font-size: 40px;
+            color: white;
+            cursor: pointer;
+            background: rgba(0,0,0,0.5);
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+            font-weight: 300;
+            line-height: 1;
+        }
+        #lightbox-close:hover {
+            background: rgba(255,255,255,0.2);
+            transform: rotate(90deg);
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        @keyframes zoomIn {
+            from { transform: scale(0.8); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
     </style>
 </head>
 <body>
@@ -100,6 +156,12 @@
             <textarea id="msg" placeholder="Type a message..." rows="1"></textarea>
             <button id="send-btn" class="btn" onclick="send()">Send</button>
         </div>
+    </div>
+
+    <!-- IMAGE LIGHTBOX POPUP -->
+    <div id="image-lightbox" onclick="closeLightbox()">
+        <span id="lightbox-close">&times;</span>
+        <img id="lightbox-img" src="" alt="Full size image" onclick="event.stopPropagation()">
     </div>
 
     <!-- M5: Color Selection Modal -->
@@ -523,6 +585,40 @@
 
         console.log('Chat restarted');
     }
+
+    // --- 8. IMAGE LIGHTBOX FUNCTIONS ---
+    function openLightbox(imageSrc) {
+        const lightbox = document.getElementById('image-lightbox');
+        const lightboxImg = document.getElementById('lightbox-img');
+
+        lightboxImg.src = imageSrc;
+        lightbox.classList.add('show');
+
+        // Prevent body scroll when lightbox is open
+        document.body.style.overflow = 'hidden';
+    }
+
+    function closeLightbox() {
+        const lightbox = document.getElementById('image-lightbox');
+        lightbox.classList.remove('show');
+
+        // Restore body scroll
+        document.body.style.overflow = '';
+    }
+
+    // Close lightbox on ESC key
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            closeLightbox();
+        }
+    });
+
+    // Make all chat images clickable (delegated event)
+    document.getElementById('chat-box').addEventListener('click', (e) => {
+        if (e.target.classList.contains('chat-img')) {
+            openLightbox(e.target.src);
+        }
+    });
 </script>
 </body>
 </html>
