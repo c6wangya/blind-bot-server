@@ -595,18 +595,105 @@
         triggerAIResponse();
     }
 
+    // --- RENDER STATE MACHINE ---
+    const RENDER_STATES = [
+        { text: "Thinking...", duration: 2000 },
+        { text: "Analyzing your room...", duration: 3000 },
+        { text: "Selecting window treatment...", duration: 3000 },
+        { text: "Generating preview...", duration: 7000 },
+        { text: "Finalizing...", duration: Infinity }
+    ];
+    let renderStateTimer = null;
+    let currentAbortController = null;
+
+    function startRenderProgress(loaderElement) {
+        // Clear any existing timer first (prevent memory leak on rapid sends)
+        if (renderStateTimer) {
+            clearTimeout(renderStateTimer);
+            renderStateTimer = null;
+        }
+
+        let stateIndex = 0;
+
+        // Use flexbox to keep × at fixed position (right side)
+        loaderElement.style.cssText = 'display:flex; justify-content:space-between; align-items:center;';
+
+        // Create status text span
+        const statusText = document.createElement('span');
+        statusText.id = 'render-status-text';
+        statusText.innerText = RENDER_STATES[0].text;
+
+        // Create cancel button (small × icon) - fixed on right
+        const cancelBtn = document.createElement('span');
+        cancelBtn.innerText = '×';
+        cancelBtn.style.cssText = 'color:#999; cursor:pointer; font-size:14px; padding-left:8px;';
+        cancelBtn.onclick = cancelRender;
+
+        loaderElement.innerHTML = '';
+        loaderElement.appendChild(statusText);
+        loaderElement.appendChild(cancelBtn);
+
+        // Use setTimeout chain with each state's duration
+        function scheduleNextState() {
+            if (stateIndex < RENDER_STATES.length - 1) {
+                renderStateTimer = setTimeout(() => {
+                    stateIndex++;
+                    const textEl = document.getElementById('render-status-text');
+                    if (textEl) textEl.innerText = RENDER_STATES[stateIndex].text;
+                    scheduleNextState();
+                }, RENDER_STATES[stateIndex].duration);
+            }
+        }
+        scheduleNextState();
+    }
+
+    function stopRenderProgress() {
+        if (renderStateTimer) {
+            clearTimeout(renderStateTimer);
+            renderStateTimer = null;
+        }
+        currentAbortController = null;
+    }
+
+    function cancelRender() {
+        if (currentAbortController) {
+            currentAbortController.abort();
+        }
+        stopRenderProgress();
+        const tempLoader = document.getElementById('temp-loader');
+        if (tempLoader) {
+            tempLoader.innerText = 'Cancelled';
+            setTimeout(() => tempLoader.remove(), 1000);
+        }
+        // Remove last user message from history (since we cancelled the response)
+        if (history.length > 0 && history[history.length - 1].role === 'user') {
+            history.pop();
+        }
+    }
+
     async function triggerAIResponse() {
         const box = document.getElementById('chat-box');
-        const loader = document.createElement('div'); loader.className='ai'; loader.innerText='...'; loader.id='temp-loader';
+        const loader = document.createElement('div'); loader.className='ai'; loader.id='temp-loader';
         box.appendChild(loader);
+
+        // Create AbortController for this request
+        currentAbortController = new AbortController();
+
+        // Start state machine progress
+        startRenderProgress(loader);
+        box.scrollTop = box.scrollHeight;
 
         try {
             const response = await fetch(`${SERVER_URL}/chat`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ history, clientApiKey: CLIENT_API_KEY })
+                body: JSON.stringify({ history, clientApiKey: CLIENT_API_KEY }),
+                signal: currentAbortController.signal
             });
             const data = await response.json();
+
+            // Stop state machine and remove loader
+            stopRenderProgress();
             document.getElementById('temp-loader').remove();
 
             // M8: Add "Change Color" button after rendered image
@@ -647,7 +734,18 @@
             box.scrollTop = box.scrollHeight;
 
         } catch (err) {
+            // Ignore abort errors (user cancelled)
+            if (err.name === 'AbortError') {
+                console.log('Request cancelled by user');
+                return;
+            }
             console.error(err);
+            // Stop state machine on error
+            stopRenderProgress();
+            const tempLoader = document.getElementById('temp-loader');
+            if (tempLoader) {
+                tempLoader.innerText = 'Something went wrong. Please try again.';
+            }
         }
     }
 
