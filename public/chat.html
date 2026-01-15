@@ -160,6 +160,31 @@
             from { transform: scale(0.8); opacity: 0; }
             to { transform: scale(1); opacity: 1; }
         }
+
+        /* UPLOAD-FIRST CARD */
+        #upload-card {
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            border: 2px dashed #adb5bd;
+            border-radius: 16px;
+            padding: 30px 20px;
+            margin: 10px 0;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        #upload-card:hover {
+            border-color: #333;
+            background: linear-gradient(135deg, #fff 0%, #f8f9fa 100%);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        #upload-card .upload-icon { font-size: 48px; margin-bottom: 12px; }
+        #upload-card .upload-text { font-size: 16px; font-weight: 600; color: #333; margin-bottom: 8px; }
+        #upload-card .upload-hint { font-size: 12px; color: #6c757d; }
+
+        /* Disabled controls state */
+        .controls.disabled { opacity: 0.5; pointer-events: none; }
+        .controls.disabled #msg { background: #f0f0f0; }
     </style>
 </head>
 <body>
@@ -175,7 +200,7 @@
 
         <div class="controls">
             <label id="upload-label" for="file-input">📷</label>
-            <input type="file" id="file-input" accept="image/*" onchange="uploadImage()">
+            <input type="file" id="file-input" accept="image/*" capture="environment" onchange="uploadImage()">
             <textarea id="msg" placeholder="Type a message..." rows="1"></textarea>
             <button id="send-btn" class="btn" onclick="send()">Send</button>
         </div>
@@ -309,8 +334,45 @@
     { role: "model", parts: [{ text: initialGreeting }] }
 ];
     
-    let stagedImages = []; 
-        
+    let stagedImages = [];
+
+    // --- UPLOAD-FIRST STATE ---
+    let hasUploadedImage = false;
+
+    // Upload-first helper: generate card HTML
+    function getUploadCardHTML() {
+        return `
+            <div id="upload-card" onclick="document.getElementById('file-input').click()">
+                <div class="upload-icon">📷</div>
+                <div class="upload-text">Upload a photo of your window</div>
+                <div class="upload-hint">JPG, PNG, or HEIC supported</div>
+            </div>`;
+    }
+
+    // Upload-first helper: show card and disable controls
+    function showUploadCard() {
+        const box = document.getElementById('chat-box');
+        const uploadGreeting = "To help you find the perfect window treatment, please start by uploading a photo of your window.";
+        box.innerHTML += `<div class="ai">${uploadGreeting}</div>`;
+        box.innerHTML += getUploadCardHTML();
+        document.querySelector('.controls').classList.add('disabled');
+    }
+
+    // Upload-first helper: hide card and enable controls
+    function enableChatControls() {
+        const uploadCard = document.getElementById('upload-card');
+        if (uploadCard) uploadCard.style.display = 'none';
+        document.querySelector('.controls').classList.remove('disabled');
+    }
+
+    // Upload-first helper: reset to initial state
+    function resetToUploadFirst() {
+        hasUploadedImage = false;
+        const box = document.getElementById('chat-box');
+        box.innerHTML = '';
+        showUploadCard();
+    }
+
     // --- 3. THEME & LOGO LOGIC ---
     const themeColor = urlParams.get('theme') || "#333";
     const logoUrl = urlParams.get('logo'); 
@@ -334,11 +396,11 @@
     `;
     document.head.appendChild(styleSheet);
 
-    // --- 4. SHOW GREETING IMMEDIATELY ---
+    // --- 4. UPLOAD-FIRST FLOW: Show upload card on load ---
     window.onload = function() {
-        const box = document.getElementById('chat-box');
-        // Instantly add the greeting bubble to the UI
-        box.innerHTML += `<div class="ai">${initialGreeting}</div>`;
+        // Show upload card instead of regular greeting
+        showUploadCard();
+
         const msgInput = document.getElementById('msg');
         msgInput.addEventListener('keydown', function(e) {
             // If Enter is pressed WITHOUT Shift
@@ -482,6 +544,12 @@
             stagedImages.push(result.url);
             document.getElementById('preview-container').innerHTML += `<div class="preview-wrapper"><img src="${result.url}" class="preview-thumb"></div>`;
 
+            // UPLOAD-FIRST: Enable chat controls after first successful upload
+            if (!hasUploadedImage) {
+                hasUploadedImage = true;
+                enableChatControls();
+            }
+
         } catch (err) {
             console.error('Upload error:', err);
             alert('Failed to upload image: ' + err.message);
@@ -589,10 +657,6 @@
             return;
         }
 
-        // Clear chat box
-        const box = document.getElementById('chat-box');
-        box.innerHTML = '';
-
         // Reset history to initial greeting
         history = [
             { role: "user", parts: [{ text: "Hello" }] },
@@ -606,8 +670,8 @@
         // Clear message input
         document.getElementById('msg').value = "";
 
-        // Show initial greeting again
-        box.innerHTML = `<div class="ai">${initialGreeting}</div>`;
+        // UPLOAD-FIRST: Reset to upload-first state
+        resetToUploadFirst();
 
         console.log('Chat restarted');
     }
