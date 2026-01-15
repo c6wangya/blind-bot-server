@@ -5,10 +5,10 @@ import express from 'express';
 // --- CONFIGURATION ---
 // CRITICAL: You need the PRICE ID (starts with 'price_...'), not the Product ID.
 // Go to Stripe Dashboard > Products > Click the 300 Credits Product > Look for the Pricing ID.
-const CREDITS_PRICE_ID = 'price_1ScdSFGwRTh0iDhh6GMbxxgp'; 
+const CREDITS_PRICE_ID = 'price_1SpTgAQh2fQ2r8jEPRLQtZ4T'; 
 
-const CREDITS_PRODUCT_ID = 'prod_TZn2iDLsLFIDTD';      
-const SUBSCRIPTION_PRODUCT_ID = 'prod_TZmsARYjlbDrJ5'; 
+const CREDITS_PRODUCT_ID = 'prod_Tn3n7Rv1dsonQn';      
+const SUBSCRIPTION_PRODUCT_ID = 'prod_Tn4FHxNAnhesep'; 
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
