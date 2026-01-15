@@ -100,12 +100,35 @@
         #image-lightbox.show {
             display: flex;
         }
+        #lightbox-content {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 16px;
+        }
         #lightbox-img {
-            max-width: 90%;
-            max-height: 90%;
+            max-width: 90vw;
+            max-height: 80vh;
             border-radius: 8px;
             box-shadow: 0 8px 32px rgba(0,0,0,0.5);
             animation: zoomIn 0.3s ease-in-out;
+        }
+        #lightbox-save {
+            background: rgba(255,255,255,0.15);
+            border: none;
+            padding: 12px 24px;
+            border-radius: 25px;
+            color: white;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        #lightbox-save:hover {
+            background: rgba(255,255,255,0.3);
+            transform: scale(1.05);
         }
         #lightbox-close {
             position: absolute;
@@ -161,7 +184,10 @@
     <!-- IMAGE LIGHTBOX POPUP -->
     <div id="image-lightbox" onclick="closeLightbox()">
         <span id="lightbox-close">&times;</span>
-        <img id="lightbox-img" src="" alt="Full size image" onclick="event.stopPropagation()">
+        <div id="lightbox-content" onclick="event.stopPropagation()">
+            <img id="lightbox-img" src="" alt="Full size image">
+            <button id="lightbox-save" onclick="saveLightboxImage()">⬇️ Save</button>
+        </div>
     </div>
 
     <!-- M5: Color Selection Modal -->
@@ -604,6 +630,49 @@
 
         // Restore body scroll
         document.body.style.overflow = '';
+    }
+
+    async function saveLightboxImage() {
+        const img = document.getElementById('lightbox-img');
+        const btn = document.getElementById('lightbox-save');
+        const url = img.src;
+
+        // Show loading state
+        const originalText = btn.innerHTML;
+        btn.innerHTML = '⏳ Saving...';
+        btn.disabled = true;
+
+        try {
+            // Fetch image as blob (handles cross-origin)
+            const response = await fetch(url);
+            const blob = await response.blob();
+
+            // Create blob URL for download
+            const blobUrl = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = blobUrl;
+            link.download = 'blindbot-rendering-' + Date.now() + '.jpg';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+
+            // Clean up blob URL
+            URL.revokeObjectURL(blobUrl);
+
+            // Success feedback
+            btn.innerHTML = '✅ Saved!';
+            setTimeout(() => {
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            }, 1500);
+        } catch (err) {
+            console.error('Save failed:', err);
+            btn.innerHTML = '❌ Failed';
+            setTimeout(() => {
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            }, 1500);
+        }
     }
 
     // Close lightbox on ESC key
