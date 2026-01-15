@@ -14,7 +14,7 @@
         .catch(err => {
             console.error("BlindBot: Could not load config", err);
             // Fallback
-            initBot({ color: "#333", alignment: 'right', sideMargin: 20, bottomMargin: 20, height: 600 });
+            initBot({ color: "#333", alignment: 'right', sideMargin: 20, bottomMargin: 20, height: 520 });
         });
 
     function initBot(config) {
@@ -23,7 +23,7 @@
         const align = config.alignment || 'right';
         const sideGap = (config.sideMargin !== undefined) ? config.sideMargin : 20;
         const bottomGap = (config.bottomMargin !== undefined) ? config.bottomMargin : (isMobile ? 100 : 20);
-        const chatHeight = (config.height !== undefined) ? config.height : 600;
+        const chatHeight = (config.height !== undefined) ? config.height : 520;
 
         // 1. Create Container
         const container = document.createElement('div');
