@@ -81,6 +81,36 @@
             background: rgba(255, 255, 255, 0.25);
         }
         #loader { display: none; text-align: center; font-size: 11px; color: #888; padding: 5px; }
+
+        /* RENDER STATUS (State Machine) */
+        #render-status {
+            display: none;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 12px 16px;
+            border-radius: 12px;
+            margin: 10px 20px;
+            text-align: center;
+            animation: pulse 2s ease-in-out infinite;
+        }
+        #render-status.active { display: block; }
+        #render-status-text { font-size: 14px; font-weight: 600; }
+        #render-cancel-btn {
+            margin-top: 8px;
+            padding: 6px 16px;
+            border: 1px solid rgba(255,255,255,0.5);
+            border-radius: 16px;
+            background: transparent;
+            color: white;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        #render-cancel-btn:hover { background: rgba(255,255,255,0.2); }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.8; }
+        }
     </style>
 </head>
 <body>
@@ -92,6 +122,10 @@
         </div>
         <div id="chat-box"></div>
         <div id="loader">Uploading image...</div>
+        <div id="render-status">
+            <div id="render-status-text">Generating preview...</div>
+            <button id="render-cancel-btn" onclick="cancelRender()">Cancel</button>
+        </div>
         <div id="preview-container"></div>
 
         <div class="controls">
@@ -118,6 +152,63 @@
    <script>
     const urlParams = new URLSearchParams(window.location.search);
     const CLIENT_API_KEY = urlParams.get('apiKey') || "YOUR_FALLBACK_TEST_KEY";
+
+    // ===== RENDER STATUS STATE MACHINE =====
+    const RENDER_STATES = [
+        { text: "Uploading photo...", duration: 2000 },
+        { text: "Analyzing your room...", duration: 3000 },
+        { text: "Selecting window treatment...", duration: 3000 },
+        { text: "Generating preview...", duration: 7000 },
+        { text: "Finalizing...", duration: Infinity }
+    ];
+    let renderStateIndex = 0;
+    let renderTimer = null;
+    let isRendering = false;
+    let renderCancelled = false;
+
+    function startRenderProgress() {
+        if (isRendering) return;
+        isRendering = true;
+        renderCancelled = false;
+        renderStateIndex = 0;
+
+        const statusEl = document.getElementById('render-status');
+        const textEl = document.getElementById('render-status-text');
+
+        statusEl.classList.add('active');
+        textEl.innerText = RENDER_STATES[0].text;
+
+        // Use setTimeout chain for dynamic durations
+        function nextState() {
+            if (!isRendering || renderStateIndex >= RENDER_STATES.length - 1) return;
+            const duration = RENDER_STATES[renderStateIndex].duration;
+            renderTimer = setTimeout(() => {
+                renderStateIndex++;
+                textEl.innerText = RENDER_STATES[renderStateIndex].text;
+                nextState();
+            }, duration);
+        }
+        nextState();
+    }
+
+    function stopRenderProgress() {
+        if (renderTimer) {
+            clearTimeout(renderTimer);
+            renderTimer = null;
+        }
+        document.getElementById('render-status').classList.remove('active');
+        isRendering = false;
+    }
+
+    function cancelRender() {
+        renderCancelled = true;
+        stopRenderProgress();
+    }
+
+    function hasImageInHistory() {
+        return history.some(h => h.role === 'user' && h.parts?.some(p => p.text?.includes('[IMAGE_URL:')));
+    }
+    // ===== END RENDER STATUS =====
 
     // M6: Color modal state and helpers
     let pendingColorInfo = null;
@@ -409,10 +500,19 @@
         const text = overrideText || document.getElementById('msg').value.trim();
         if (!text && stagedImages.length === 0) return;
 
+        // Prevent duplicate sends while rendering
+        if (isRendering) {
+            console.log('Render in progress, ignoring send');
+            return;
+        }
+
         const box = document.getElementById('chat-box');
 
         // Hide internal protocol messages from UI (but still send to server)
         const isProtocolMsg = text && text.startsWith('__BB_COLOR__::');
+
+        // Detect if this might trigger a render (color change or product selection with image in history)
+        const mightRender = isProtocolMsg || (text && hasImageInHistory());
 
         let displayHtml = "";
         stagedImages.forEach(url => displayHtml += `<img src="${url}" class="chat-img">`);
@@ -433,14 +533,20 @@
         history.push({ role: "user", parts: [{ text: backendText }] });
 
         document.getElementById('msg').value = "";
-        stagedImages = []; 
+        stagedImages = [];
         document.getElementById('preview-container').innerHTML = "";
-        
-        triggerAIResponse();
+
+        triggerAIResponse(mightRender);
     }
 
-    async function triggerAIResponse() {
+    async function triggerAIResponse(showRenderStatus = false) {
         const box = document.getElementById('chat-box');
+
+        // Start render status if this might be a render request
+        if (showRenderStatus) {
+            startRenderProgress();
+        }
+
         const loader = document.createElement('div'); loader.className='ai'; loader.innerText='...'; loader.id='temp-loader';
         box.appendChild(loader);
 
@@ -451,6 +557,17 @@
                 body: JSON.stringify({ history, clientApiKey: CLIENT_API_KEY })
             });
             const data = await response.json();
+
+            // Stop render status
+            stopRenderProgress();
+
+            // If cancelled, ignore response
+            if (renderCancelled) {
+                document.getElementById('temp-loader')?.remove();
+                renderCancelled = false;
+                return;
+            }
+
             document.getElementById('temp-loader').remove();
 
             // M8: Add "Change Color" button after rendered image
@@ -492,6 +609,8 @@
 
         } catch (err) {
             console.error(err);
+            stopRenderProgress();
+            document.getElementById('temp-loader')?.remove();
         }
     }
 

@@ -19,7 +19,7 @@ import { setupStatsRoutes } from './stats_handler.js';
 import { Resend } from 'resend';
 import { testEmailConfiguration } from './email_handler.js';
 import { wrapGeminiCall } from './rate_limiter.js';
-import { downloadAndConvertImage, ensureBrowserCompatible } from './image_utils.js';
+import { downloadAndConvertImage, ensureBrowserCompatible, compressForRendering } from './image_utils.js';
 import { processPDFPipeline } from './services/pdf/pipeline.js';
 
 const require = createRequire(import.meta.url);
@@ -52,9 +52,15 @@ async function generateRendering(sourceImageUrl, promptText) {
         // 1. Prepare the model (Nano Banana Pro)
         const imageModel = genAI.getGenerativeModel({ model: "gemini-3-pro-image-preview" });
         
-        // 2. Download the room image
+        // 2. Download and compress the room image (long edge max 1536px)
         const imagePart = await urlToGenerativePart(sourceImageUrl);
         if (!imagePart) throw new Error("Could not download source image.");
+
+        // 2.5 Compress for faster processing
+        const originalBuffer = Buffer.from(imagePart.inlineData.data, 'base64');
+        const compressedBuffer = await compressForRendering(originalBuffer);
+        imagePart.inlineData.data = compressedBuffer.toString('base64');
+        imagePart.inlineData.mimeType = 'image/jpeg';
 
         // 3. Construct Prompt
         const fullPrompt = `
