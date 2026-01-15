@@ -349,13 +349,12 @@
             </div>`;
     }
 
-    // Upload-first helper: show card and disable controls
+    // Upload-first helper: show card (controls remain enabled for questions)
     function showUploadCard() {
         const box = document.getElementById('chat-box');
         const uploadGreeting = "To help you find the perfect window treatment, please start by uploading a photo of your window.";
         box.innerHTML += `<div class="ai">${uploadGreeting}</div>`;
         box.innerHTML += getUploadCardHTML();
-        document.querySelector('.controls').classList.add('disabled');
     }
 
     // Upload-first helper: hide card and enable controls
