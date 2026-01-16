@@ -410,7 +410,7 @@ app.post('/chat', async (req, res) => {
         if (jsonResponse.product_suggestions && jsonResponse.product_suggestions.length > 0 && products) {
             jsonResponse.product_suggestions = products.map((p, idx) => ({
                 name: p.name,
-                image: p.image_url,
+                image: (p.image_url || '').split(/[,;\n|]/)[0].trim(), // First URL only
                 id: idx,
                 // M1: Return colors as array for frontend color selector
                 colors: (p.var_colors || '').split(',').map(c => c.trim()).filter(c => c)
