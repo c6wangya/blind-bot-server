@@ -28,7 +28,6 @@ const require = createRequire(import.meta.url);
 dotenv.config();
 const app = express();
 app.use(cors(corsOptions));
-app.options('*', cors(corsOptions)); // Enable preflight for all routes
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
 setupStripeWebhook(app, supabase);
 app.use(express.json({ limit: '50mb' }));
