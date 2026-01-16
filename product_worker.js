@@ -9,20 +9,51 @@ dotenv.config();
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KEY);
 
-// Helper: Download Media
-async function downloadMedia(url) {
+// Helper: Parse URL field that may contain multiple URLs
+// Supports: comma, semicolon, newline, pipe separators
+// Also handles JSON array strings like ["url1", "url2"]
+function parseUrlField(urlField) {
+    if (!urlField) return [];
+
+    let urlString = String(urlField).trim();
+
+    // Handle JSON array format: ["url1", "url2"]
+    if (urlString.startsWith('[')) {
+        try {
+            const parsed = JSON.parse(urlString);
+            if (Array.isArray(parsed)) {
+                return parsed.map(u => String(u).trim()).filter(u => u.length > 5);
+            }
+        } catch (e) {
+            // Not valid JSON, continue with string parsing
+        }
+    }
+
+    // Split by common separators: comma, semicolon, newline, pipe
+    // But be careful not to split URLs that contain commas in query params
+    const urls = urlString
+        .split(/[,;\n|]+/)
+        .map(u => u.trim())
+        .filter(u => u.length > 5 && (u.startsWith('http://') || u.startsWith('https://')));
+
+    return urls;
+}
+
+// Helper: Download single media file
+async function downloadSingleMedia(url) {
     if (!url) return null;
     try {
-        const cleanUrl = url.trim().replace(/["\[\]]/g, ''); 
+        const cleanUrl = url.trim().replace(/["\[\]]/g, '');
         if (cleanUrl.length < 5) return null;
 
-        console.log(`      ⬇️ Downloading: ${cleanUrl.substring(0, 40)}...`);
-        const response = await axios.get(cleanUrl, { responseType: 'arraybuffer' });
+        console.log(`      ⬇️ Downloading: ${cleanUrl.substring(0, 50)}...`);
+        const response = await axios.get(cleanUrl, { responseType: 'arraybuffer', timeout: 30000 });
         const lowerUrl = cleanUrl.toLowerCase();
-        let mimeType = "image/jpeg"; 
+        let mimeType = "image/jpeg";
         if (lowerUrl.endsWith('.png')) mimeType = "image/png";
         if (lowerUrl.endsWith('.pdf')) mimeType = "application/pdf";
         if (lowerUrl.endsWith('.webp')) mimeType = "image/webp";
+        if (lowerUrl.endsWith('.gif')) mimeType = "image/gif";
 
         return {
             inlineData: {
@@ -30,10 +61,31 @@ async function downloadMedia(url) {
                 mimeType: mimeType
             }
         };
-    } catch (e) { 
-        console.error("      ❌ Download failed for an item:", e.message);
-        return null; 
+    } catch (e) {
+        console.error("      ❌ Download failed:", e.message);
+        return null;
     }
+}
+
+// Helper: Download Media - supports single URL or multiple URLs
+async function downloadMedia(urlField) {
+    if (!urlField) return [];
+
+    const urls = parseUrlField(urlField);
+
+    // If no valid URLs found, try as single URL (backward compat)
+    if (urls.length === 0) {
+        const result = await downloadSingleMedia(urlField);
+        return result ? [result] : [];
+    }
+
+    // Download all URLs
+    const results = [];
+    for (const url of urls) {
+        const result = await downloadSingleMedia(url);
+        if (result) results.push(result);
+    }
+    return results;
 }
 
 export async function startProductWorker() {
@@ -63,18 +115,18 @@ export async function startProductWorker() {
                     
                     const inputs = [];
 
-                    // 1. PRIMARY SOURCES
-                    const filePart = await downloadMedia(product.product_file_url);
-                    const mainImagePart = await downloadMedia(product.image_url);
-                    if (filePart) inputs.push(filePart);
-                    if (mainImagePart) inputs.push(mainImagePart);
+                    // 1. PRIMARY SOURCES (now returns arrays)
+                    const fileParts = await downloadMedia(product.product_file_url);
+                    const mainImageParts = await downloadMedia(product.image_url);
+                    inputs.push(...fileParts);
+                    inputs.push(...mainImageParts);
 
                     // 2. GALLERY SOURCES
                     if (product.gallery_images && Array.isArray(product.gallery_images)) {
-                        const extraImages = product.gallery_images.slice(0, 3);
+                        const extraImages = product.gallery_images.slice(0, 5); // increased to 5
                         for (const imgUrl of extraImages) {
-                            const galleryPart = await downloadMedia(imgUrl);
-                            if (galleryPart) inputs.push(galleryPart);
+                            const galleryParts = await downloadMedia(imgUrl);
+                            inputs.push(...galleryParts);
                         }
                     }
 
