@@ -1,5 +1,6 @@
 import { Resend } from 'resend';
 import dotenv from 'dotenv';
+import { EMAIL_FROM_LEADS, EMAIL_FROM_ALERTS } from './config.js';
 dotenv.config();
 
 // Initialize Resend with your API Key
@@ -75,7 +76,7 @@ export async function sendLeadNotification(toEmails, leadData) {
         // CRITICAL: The 'from' address MUST be a domain you verified on Resend (e.g., 'alerts@theblindsbot.com')
         // It CANNOT be a gmail/yahoo address.
         const data = await resend.emails.send({
-            from: 'The Blinds Bot <leads@support.theblindbots.com>',
+            from: EMAIL_FROM_LEADS,
             to: recipientList,
             subject: `🎯 New Lead: ${leadData.name || 'Visitor'}`,
             html: htmlBody,
@@ -109,7 +110,7 @@ export async function testEmailConfiguration() {
     try {
         // Send test to Resend's dummy address (won't actually deliver)
         await resend.emails.send({
-            from: 'The Blinds Bot <leads@support.theblindbots.com>',
+            from: EMAIL_FROM_LEADS,
             to: 'test@resend.dev', // Resend's official test address - accepts but doesn't deliver
             subject: '✅ Email Service Test',
             html: '<p>Email service is operational.</p>'
@@ -128,7 +129,7 @@ export async function testEmailConfiguration() {
         if (adminEmail) {
             try {
                 await resend.emails.send({
-                    from: 'The Blinds Bot <alerts@support.theblindbots.com>',
+                    from: EMAIL_FROM_ALERTS,
                     to: adminEmail,
                     subject: '🚨 Blinds Bot Email Service DOWN',
                     html: `

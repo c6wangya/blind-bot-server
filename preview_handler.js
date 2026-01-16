@@ -1,5 +1,6 @@
 // preview_handler.js
 import axios from 'axios';
+import { getWidgetScriptTag } from './config.js';
 
 export function setupPreviewRoutes(app, supabase) {
     console.log("🖼️ Preview Module Loaded.");
@@ -8,7 +9,7 @@ export function setupPreviewRoutes(app, supabase) {
     app.get('/preview/:apiKey', async (req, res) => {
         try {
             const { apiKey } = req.params;
-            const { no_widget } = req.query; // <--- NEW: Check for flag
+            const { no_widget } = req.query;
 
             // Fetch Client Info
             const { data: client } = await supabase
@@ -19,8 +20,8 @@ export function setupPreviewRoutes(app, supabase) {
 
             if (!client) return res.status(404).send("Client not found");
 
-            // Define the Widget Script Tag
-            const scriptTag = `<script src="https://blind-bot-server.onrender.com/widget.js" data-api-key="${apiKey}"></script>`;
+            // Define the Widget Script Tag (uses PUBLIC_BASE_URL from config)
+            const scriptTag = getWidgetScriptTag(apiKey);
 
             // SCENARIO A: Custom Website URL Exists
             if (client.website_url) {

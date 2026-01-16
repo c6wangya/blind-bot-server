@@ -5,11 +5,11 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { createClient } from '@supabase/supabase-js';
 import axios from 'axios';
 import FormData from 'form-data';
-import sharp from 'sharp'; 
-import { createRequire } from 'module'; 
+import sharp from 'sharp';
+import { createRequire } from 'module';
 import { TaskType } from "@google/generative-ai";
 import { startProductWorker } from './product_worker.js';
-import { validateClientAccess, deductImageCredit } from './subscription_manager.js'; 
+import { validateClientAccess, deductImageCredit } from './subscription_manager.js';
 import { startPersonaWorker, forceRetrainClient } from './persona_worker.js';
 import { setupStripeWebhook, createPortalSession } from './stripe_handler.js';
 import { handleLeadData } from './leads_manager.js';
@@ -21,12 +21,13 @@ import { testEmailConfiguration } from './email_handler.js';
 import { wrapGeminiCall } from './rate_limiter.js';
 import { downloadAndConvertImage, ensureBrowserCompatible, compressForRendering } from './image_utils.js';
 import { processPDFPipeline } from './services/pdf/pipeline.js';
+import { APP_ENV, corsOptions, EMAIL_FROM_SUPPORT, EMAIL_ADMIN_TO } from './config.js';
 
 const require = createRequire(import.meta.url);
 
 dotenv.config();
 const app = express();
-app.use(cors());
+app.use(cors(corsOptions));
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
 setupStripeWebhook(app, supabase);
 app.use(express.json({ limit: '50mb' }));
@@ -1020,8 +1021,8 @@ app.post('/contact-support', async (req, res) => {
         console.log("Ticket saved. ID:", ticket.id);
         // 4. Send Notification Email
         const adminEmail = await resend.emails.send({
-            from:'Client Support <help@support.theblindbots.com>', // Change to 'support@theblindbots.com' once verified
-            to: ['rob.wen@theblindbots.com'], // MUST be your verified Resend email
+            from: EMAIL_FROM_SUPPORT,
+            to: [EMAIL_ADMIN_TO],
             reply_to: userEmail,
             subject: `[New Ticket] ${client.company_name} - ${topic}`,
             html: `
@@ -1040,7 +1041,7 @@ app.post('/contact-support', async (req, res) => {
         // NOTE: This will ONLY work if you have verified your domain on Resend.
         // If you are on the "onboarding" domain, this will fail for anyone except yourself.
         const clientConfirmation = await resend.emails.send({
-            from: 'Client Support <help@support.theblindbots.com>',
+            from: EMAIL_FROM_SUPPORT,
             to: [userEmail], 
             subject: `We received your request: ${topic}`,
             html: `
@@ -1062,8 +1063,14 @@ app.post('/contact-support', async (req, res) => {
         res.status(500).json({ error: "Internal Server Error" });
     }
 });
-app.listen(3000, async () => {
-    console.log('🚀 Gallery Agent Running');
+// Health check endpoint
+app.get('/health', (req, res) => {
+    res.json({ status: 'ok', env: APP_ENV });
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, async () => {
+    console.log(`🚀 Gallery Agent Running on port ${PORT} (env: ${APP_ENV})`);
 
     // Test email configuration on startup
     await testEmailConfiguration();

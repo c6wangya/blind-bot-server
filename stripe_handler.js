@@ -1,6 +1,7 @@
 // stripe_handler.js
 import Stripe from 'stripe';
 import express from 'express';
+import { getFrontendUrl } from './config.js';
 
 // --- CONFIGURATION ---
 // CRITICAL: You need the PRICE ID (starts with 'price_...'), not the Product ID.
@@ -185,7 +186,7 @@ export async function createPortalSession(stripeCustomerId) {
     // This creates a temporary, secure link that logs the user into Stripe
     const session = await stripe.billingPortal.sessions.create({
         customer: stripeCustomerId,
-        return_url: 'https://www.theblindbots.com/settings', 
+        return_url: getFrontendUrl('/settings'),
     });
     return session.url;
 }

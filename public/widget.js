@@ -1,7 +1,8 @@
 (function() {
     const scriptTag = document.currentScript || document.querySelector('script[data-api-key]');
     const apiKey = scriptTag.getAttribute('data-api-key');
-    const SERVER_URL = "https://blind-bot-server.onrender.com"; 
+    // Derive SERVER_URL from the script's own origin (works for prod/beta automatically)
+    const SERVER_URL = new URL(scriptTag.src).origin; 
 
     if (!apiKey) return console.error("BlindBot: No API Key found.");
 
