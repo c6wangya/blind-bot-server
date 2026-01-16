@@ -105,7 +105,7 @@ app.get('/client-config/:apiKey', async (req, res) => {
         // FIX 1: We added the new columns to the select list
         const { data: client, error } = await supabase
             .from('clients')
-            .select('primary_color, logo_url, company_name, greeting_override, widget_alignment, widget_side_margin, widget_bottom_margin, widget_height, notification_emails, email') 
+            .select('primary_color, logo_url, company_name, greeting_override, widget_alignment, widget_side_margin, widget_bottom_margin, widget_height, notification_emails, email, website_url') 
             .eq('api_key', apiKey)
             .single();
 
@@ -124,7 +124,8 @@ app.get('/client-config/:apiKey', async (req, res) => {
             sideMargin: client.widget_side_margin || 20,
             bottomMargin: client.widget_bottom_margin || 20,
             height: client.widget_height || 600,
-            emails: defaultEmails // Sends "rob@test.com" or "rob@test.com, jim@test.com"
+            emails: defaultEmails, // Sends "rob@test.com" or "rob@test.com, jim@test.com"
+            websiteUrl: client.website_url || ""
         });
         
     } catch (err) {
