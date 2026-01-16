@@ -73,7 +73,12 @@ function corsOptions(req, callback) {
     const origin = req.header('Origin');
 
     if (isAllowedOrigin(origin)) {
-        callback(null, { origin: true, credentials: true });
+        callback(null, {
+            origin: true,
+            credentials: true,
+            methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+            allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+        });
     } else {
         console.warn(`[CORS] Rejected origin: ${origin} (env: ${APP_ENV})`);
         callback(null, { origin: false });
