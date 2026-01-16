@@ -39,22 +39,30 @@ function parseUrlField(urlField) {
     return urls;
 }
 
-// Helper: Download single media file (images/PDFs only)
+// Helper: Download single media file (images/PDFs as inlineData, text as string)
 async function downloadSingleMedia(url) {
     if (!url) return null;
     try {
         const cleanUrl = url.trim().replace(/["\[\]]/g, '');
         if (cleanUrl.length < 5) return null;
 
-        // Skip non-image/PDF files
         const lowerUrl = cleanUrl.toLowerCase().split('?')[0]; // Remove query params
-        const validExts = ['.jpg', '.jpeg', '.png', '.webp', '.gif', '.pdf'];
-        if (!validExts.some(ext => lowerUrl.endsWith(ext))) {
-            console.log(`      ⏭️ Skipping non-image: ${cleanUrl.substring(0, 50)}...`);
+        console.log(`      ⬇️ Downloading: ${cleanUrl.substring(0, 50)}...`);
+
+        // Handle text files - return as plain text string for Gemini
+        if (lowerUrl.endsWith('.txt')) {
+            const response = await axios.get(cleanUrl, { responseType: 'text', timeout: 30000 });
+            console.log(`      📄 Text file loaded (${response.data.length} chars)`);
+            return `[Product Document Content]:\n${response.data}`;
+        }
+
+        // Handle images/PDFs - return as inlineData
+        const imageExts = ['.jpg', '.jpeg', '.png', '.webp', '.gif', '.pdf'];
+        if (!imageExts.some(ext => lowerUrl.endsWith(ext))) {
+            console.log(`      ⏭️ Skipping unsupported format: ${cleanUrl.substring(0, 50)}...`);
             return null;
         }
 
-        console.log(`      ⬇️ Downloading: ${cleanUrl.substring(0, 50)}...`);
         const response = await axios.get(cleanUrl, { responseType: 'arraybuffer', timeout: 30000 });
         let mimeType = "image/jpeg";
         if (lowerUrl.endsWith('.png')) mimeType = "image/png";
