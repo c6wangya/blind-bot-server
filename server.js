@@ -37,6 +37,27 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 // ==================================================================
+// FIREPLACE DETECTION PROMPTS (Two-stage detection)
+// ==================================================================
+const FIREPLACE_DETECTION_SYSTEM_PROMPT = `You are a strict visual verifier. Your job is to decide whether a real fireplace is present in the provided room image.
+A "fireplace" means an actual built-in fireplace structure with a clearly visible firebox opening (a cavity meant for fire) or unmistakable hearth + mantel + firebox opening.
+Do NOT confuse fireplaces with: TVs, media consoles, shelves, cabinets, bookcases, wall niches, recessed shelves, radiators, vents, windows, mirrors, pictures, or decorative wall panels.
+If you are not completely sure, you must answer NO_FIREPLACE.`;
+
+const FIREPLACE_DETECTION_USER_PROMPT = `Analyze the provided room image and classify ONLY whether a real fireplace is clearly visible.
+
+Output format (STRICT):
+Return EXACTLY ONE token on a single line, with no punctuation and no extra words:
+HAS_FIREPLACE
+or
+NO_FIREPLACE
+
+Decision rules (STRICT):
+- Only output HAS_FIREPLACE if you see an unmistakable built-in fireplace with a clearly visible firebox opening.
+- If the image is ambiguous, partially occluded, low-quality, or could be a TV / cabinet / niche, output NO_FIREPLACE.
+- Do not guess. Default to NO_FIREPLACE unless certain.`;
+
+// ==================================================================
 // 1. HELPER FUNCTIONS
 // ==================================================================
 
@@ -45,35 +66,77 @@ async function urlToGenerativePart(url) {
     return await downloadAndConvertImage(url);
 }
 
+/**
+ * Detect if a fireplace is present in the image using Flash model
+ * Fail-safe: returns false on any error (no fireplace = no fire added)
+ * @param {string} imageUrl - URL of the room image
+ * @returns {Promise<boolean>} - true if fireplace detected
+ */
+async function detectFireplace(imageUrl) {
+    try {
+        const flashModel = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
+        const imagePart = await urlToGenerativePart(imageUrl);
+
+        if (!imagePart) {
+            console.log("🔥 Fireplace detection: skipped (no image)");
+            return false;
+        }
+
+        const result = await wrapGeminiCall(() =>
+            flashModel.generateContent([
+                FIREPLACE_DETECTION_SYSTEM_PROMPT,
+                FIREPLACE_DETECTION_USER_PROMPT,
+                imagePart
+            ])
+        );
+
+        const response = result.response.text().trim().toUpperCase();
+        // Use includes() to handle "HAS_FIREPLACE." or extra whitespace
+        const hasFireplace = response.includes('HAS_FIREPLACE') && !response.includes('NO_FIREPLACE');
+
+        console.log(`🔥 Fireplace detection: ${response} → ${hasFireplace ? 'YES' : 'NO'}`);
+        return hasFireplace;
+
+    } catch (err) {
+        console.error("❌ Fireplace detection failed:", err.message);
+        return false; // Fail-safe: error → no fireplace
+    }
+}
+
 async function generateRendering(sourceImageUrl, promptText) {
     try {
         console.log("🎨 Generating with Nano Banana Pro (Gemini 3 Pro Image)...");
-        
-        // 1. Prepare the model (Nano Banana Pro)
+
+        // 1. Detect fireplace first (two-stage approach)
+        const hasFireplace = await detectFireplace(sourceImageUrl);
+
+        // 2. Prepare the model (Nano Banana Pro)
         const imageModel = genAI.getGenerativeModel({ model: "gemini-3-pro-image-preview" });
-        
-        // 2. Download the room image
+
+        // 3. Download the room image
         const imagePart = await urlToGenerativePart(sourceImageUrl);
         if (!imagePart) throw new Error("Could not download source image.");
 
-        // 3. Construct Prompt
-        const fullPrompt = `
-        Turn this room image into a professional interior design photo.
-        Apply the following window treatment strictly: ${promptText}.
-        Keep the original room layout, furniture, and lighting.
-        If a fireplace is clearly visible in the original image, add a subtle, realistic fire with soft flames and warm glow.
-        If no fireplace is visible, do NOT add any flames, fire, or extra light sources.
-        High resolution, photorealistic, 8k.
-        `;
+        // 4. Construct Prompt based on fireplace detection
+        const fullPrompt = hasFireplace
+            ? `Turn this room image into a professional interior design photo.
+               Apply the following window treatment strictly: ${promptText}.
+               Keep the original room layout, furniture, and lighting.
+               Add a subtle, realistic fire with soft flames and warm glow to the fireplace.
+               High resolution, photorealistic, 8k.`
+            : `Turn this room image into a professional interior design photo.
+               Apply the following window treatment strictly: ${promptText}.
+               Keep the original room layout, furniture, and lighting.
+               High resolution, photorealistic, 8k.`;
 
-        // 4. Generate (Image-to-Image) - with rate limiting
+        // 5. Generate (Image-to-Image) - with rate limiting
         const result = await wrapGeminiCall(
             () => imageModel.generateContent([fullPrompt, imagePart]),
             true // High priority - user interaction
         );
         const response = result.response;
         
-        // 5. Extract Image
+        // 6. Extract Image
         if (!response.candidates || !response.candidates[0].content.parts) {
             throw new Error("No image generated.");
         }
@@ -82,7 +145,7 @@ async function generateRendering(sourceImageUrl, promptText) {
 
         const base64Image = generatedPart.inlineData.data;
 
-        // 6. Upload to Supabase
+        // 7. Upload to Supabase
         const fileName = `renderings/${Date.now()}_render.png`;
         const { error } = await supabase.storage.from('chat-uploads').upload(fileName, Buffer.from(base64Image, 'base64'), { contentType: 'image/png' });
         

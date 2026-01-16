@@ -48,31 +48,33 @@ export function setupPreviewRoutes(app, supabase) {
                 }
             }
 
-            // SCENARIO B: Generic Fallback Page
-            const genericHtml = `
+            // SCENARIO B: iframe fallback (bypasses firewall blocking)
+            const iframeHtml = `
                 <!DOCTYPE html>
                 <html>
                 <head>
                     <title>Bot Preview</title>
                     <style>
-                        body { font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; background: #f0f2f5; margin: 0; }
-                        .card { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); text-align: center; max-width: 500px; }
-                        h1 { color: #333; margin-bottom: 10px; }
-                        p { color: #666; line-height: 1.6; }
+                        body { margin: 0; padding: 0; }
+                        iframe { width: 100vw; height: 100vh; border: none; }
                     </style>
                 </head>
                 <body>
-                    <div class="card">
-                        <h1>Your Bot is Ready!</h1>
-                        <p>This is a preview of how your AI Assistant behaves.</p>
-                        <p>On your real website, it will float in the corner just like this.</p>
-                    </div>
+                    ${client.website_url
+                        ? `<iframe src="${client.website_url}"></iframe>`
+                        : `<div style="font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;background:#f0f2f5;">
+                               <div style="background:white;padding:40px;border-radius:12px;box-shadow:0 4px 15px rgba(0,0,0,0.1);text-align:center;">
+                                   <h1>Your Bot is Ready!</h1>
+                                   <p>Add your website URL to see the preview.</p>
+                               </div>
+                           </div>`
+                    }
                     ${no_widget !== 'true' ? scriptTag : ''}
                 </body>
                 </html>
             `;
 
-            res.send(genericHtml);
+            res.send(iframeHtml);
 
         } catch (err) {
             console.error("Preview Endpoint Error:", err);
