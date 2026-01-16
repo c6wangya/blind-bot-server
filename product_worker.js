@@ -39,16 +39,23 @@ function parseUrlField(urlField) {
     return urls;
 }
 
-// Helper: Download single media file
+// Helper: Download single media file (images/PDFs only)
 async function downloadSingleMedia(url) {
     if (!url) return null;
     try {
         const cleanUrl = url.trim().replace(/["\[\]]/g, '');
         if (cleanUrl.length < 5) return null;
 
+        // Skip non-image/PDF files
+        const lowerUrl = cleanUrl.toLowerCase().split('?')[0]; // Remove query params
+        const validExts = ['.jpg', '.jpeg', '.png', '.webp', '.gif', '.pdf'];
+        if (!validExts.some(ext => lowerUrl.endsWith(ext))) {
+            console.log(`      ⏭️ Skipping non-image: ${cleanUrl.substring(0, 50)}...`);
+            return null;
+        }
+
         console.log(`      ⬇️ Downloading: ${cleanUrl.substring(0, 50)}...`);
         const response = await axios.get(cleanUrl, { responseType: 'arraybuffer', timeout: 30000 });
-        const lowerUrl = cleanUrl.toLowerCase();
         let mimeType = "image/jpeg";
         if (lowerUrl.endsWith('.png')) mimeType = "image/png";
         if (lowerUrl.endsWith('.pdf')) mimeType = "application/pdf";

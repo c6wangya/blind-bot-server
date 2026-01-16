@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Media Filter Unit Tests</title>
+    <style>
+        body { font-family: monospace; padding: 20px; background: #1a1a2e; color: #eee; }
+        .test { margin: 10px 0; padding: 10px; border-radius: 6px; }
+        .pass { background: #16a34a; }
+        .fail { background: #dc2626; }
+        h1 { color: #fff; }
+        h2 { color: #94a3b8; margin-top: 30px; }
+        pre { background: #0f0f23; padding: 10px; border-radius: 4px; overflow-x: auto; }
+        .summary { margin-top: 30px; padding: 20px; background: #334155; border-radius: 8px; }
+    </style>
+</head>
+<body>
+    <h1>Media Filter Unit Tests</h1>
+    <p>Tests the file extension filtering logic in downloadSingleMedia()</p>
+    <div id="results"></div>
+    <div id="summary" class="summary"></div>
+
+    <script>
+        // Extract the filtering logic from downloadSingleMedia
+        function shouldDownload(url) {
+            if (!url) return { download: false, reason: 'null/undefined' };
+
+            const cleanUrl = url.trim().replace(/["\[\]]/g, '');
+            if (cleanUrl.length < 5) return { download: false, reason: 'too short' };
+
+            const lowerUrl = cleanUrl.toLowerCase().split('?')[0];
+            const validExts = ['.jpg', '.jpeg', '.png', '.webp', '.gif', '.pdf'];
+
+            if (!validExts.some(ext => lowerUrl.endsWith(ext))) {
+                return { download: false, reason: 'invalid extension' };
+            }
+
+            return { download: true, reason: 'valid' };
+        }
+
+        // Test cases
+        const tests = [
+            // Valid images
+            {
+                name: "PNG image",
+                input: "https://example.com/image.png",
+                expected: true
+            },
+            {
+                name: "JPG image",
+                input: "https://example.com/photo.jpg",
+                expected: true
+            },
+            {
+                name: "JPEG image",
+                input: "https://example.com/photo.jpeg",
+                expected: true
+            },
+            {
+                name: "WebP image",
+                input: "https://example.com/image.webp",
+                expected: true
+            },
+            {
+                name: "GIF image",
+                input: "https://example.com/anim.gif",
+                expected: true
+            },
+            {
+                name: "PDF document",
+                input: "https://example.com/spec.pdf",
+                expected: true
+            },
+
+            // With query params
+            {
+                name: "PNG with query params",
+                input: "https://example.com/image.png?v=1&size=large",
+                expected: true
+            },
+            {
+                name: "JPG with signed URL params",
+                input: "https://s3.amazonaws.com/bucket/image.jpg?X-Amz-Algorithm=AWS4&Signature=abc123",
+                expected: true
+            },
+
+            // Case insensitive
+            {
+                name: "Uppercase PNG",
+                input: "https://example.com/IMAGE.PNG",
+                expected: true
+            },
+            {
+                name: "Mixed case JPEG",
+                input: "https://example.com/Photo.JpEg",
+                expected: true
+            },
+
+            // Invalid files - should be skipped
+            {
+                name: "TXT file (should skip)",
+                input: "https://example.com/spec.txt",
+                expected: false
+            },
+            {
+                name: "DOC file (should skip)",
+                input: "https://example.com/document.doc",
+                expected: false
+            },
+            {
+                name: "DOCX file (should skip)",
+                input: "https://example.com/document.docx",
+                expected: false
+            },
+            {
+                name: "XLS file (should skip)",
+                input: "https://example.com/data.xls",
+                expected: false
+            },
+            {
+                name: "CSV file (should skip)",
+                input: "https://example.com/data.csv",
+                expected: false
+            },
+            {
+                name: "HTML file (should skip)",
+                input: "https://example.com/page.html",
+                expected: false
+            },
+            {
+                name: "JSON file (should skip)",
+                input: "https://example.com/config.json",
+                expected: false
+            },
+
+            // Edge cases
+            {
+                name: "No extension (should skip)",
+                input: "https://example.com/image",
+                expected: false
+            },
+            {
+                name: "Empty string",
+                input: "",
+                expected: false
+            },
+            {
+                name: "Null input",
+                input: null,
+                expected: false
+            },
+            {
+                name: "Undefined input",
+                input: undefined,
+                expected: false
+            },
+            {
+                name: "Short string",
+                input: "http",
+                expected: false
+            },
+
+            // Real Softr URLs
+            {
+                name: "Real Softr PNG",
+                input: "https://app-files-v1.softr-files.com/applications/4324d9cc-81a4-481a-a8d7-3f1037531243/uploads/010768ff-ab8d-4534-a4d7-c6c183ac46bf/1.png",
+                expected: true
+            },
+            {
+                name: "Real Softr TXT (the bug case)",
+                input: "https://app-files-v1.softr-files.com/applications/4324d9cc-81a4-481a-a8d7-3f1037531243/uploads/abc123/spec.txt",
+                expected: false
+            },
+
+            // URL with brackets (from JSON parsing)
+            {
+                name: "URL with brackets",
+                input: '["https://example.com/image.png"]',
+                expected: true
+            }
+        ];
+
+        // Run tests
+        let passed = 0;
+        let failed = 0;
+        const resultsDiv = document.getElementById('results');
+
+        tests.forEach((test, index) => {
+            const result = shouldDownload(test.input);
+            const isPass = result.download === test.expected;
+
+            if (isPass) {
+                passed++;
+            } else {
+                failed++;
+            }
+
+            const testDiv = document.createElement('div');
+            testDiv.className = `test ${isPass ? 'pass' : 'fail'}`;
+            testDiv.innerHTML = `
+                <strong>${isPass ? '✅' : '❌'} Test ${index + 1}: ${test.name}</strong>
+                <pre>Input: ${JSON.stringify(test.input)}
+Expected download: ${test.expected}
+Got: ${result.download} (${result.reason})</pre>
+            `;
+            resultsDiv.appendChild(testDiv);
+        });
+
+        // Summary
+        document.getElementById('summary').innerHTML = `
+            <h2>Summary</h2>
+            <p><strong>Total:</strong> ${tests.length}</p>
+            <p><strong style="color: #4ade80;">Passed:</strong> ${passed}</p>
+            <p><strong style="color: #f87171;">Failed:</strong> ${failed}</p>
+            <p><strong>Pass Rate:</strong> ${((passed / tests.length) * 100).toFixed(1)}%</p>
+        `;
+    </script>
+</body>
+</html>
