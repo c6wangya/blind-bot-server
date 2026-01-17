@@ -152,6 +152,7 @@ async function handleCheckout(session, email, stripe, supabase) {
                         const trialEnd = new Date();
                         trialEnd.setMonth(trialEnd.getMonth() + 1); // 1 month from now
                         updateData.trial_ends_at = trialEnd.toISOString();
+                        updateData.image_credits = 10_000; // Initial 10_000 credits on subscription start
                         console.log(`   🎁 Setting 1-month free trial for ${email} until ${trialEnd.toLocaleDateString()}`);
                     } else {
                         console.log(`   ⏭️  Trial already exists for ${email}, skipping trial setup`);
