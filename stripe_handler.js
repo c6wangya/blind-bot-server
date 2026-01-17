@@ -124,27 +124,49 @@ export function setupStripeWebhook(app, supabase) {
 async function handleCheckout(session, email, stripe, supabase) {
     try {
         const lineItems = await stripe.checkout.sessions.listLineItems(session.id);
-        const { data: client } = await supabase.from('clients').select('id, image_credits').eq('email', email).single();
+        const { data: client } = await supabase
+            .from('clients')
+            .select('id, image_credits, trial_ends_at, created_at')
+            .eq('email', email)
+            .single();
 
         if (client) {
             let updateData = {};
             for (const item of lineItems.data) {
+                // Credits Purchase
                 if (item.price.product === CREDITS_PRODUCT_ID) {
                     const qty = item.quantity || 1;
                     const current = client.image_credits || 0;
                     // Fix: Ensure we don't overwrite if multiple packs bought
                     const base = updateData.image_credits !== undefined ? updateData.image_credits : current;
                     updateData.image_credits = base + (300 * qty);
+                    console.log(`   💰 Adding ${300 * qty} credits (${qty}x 300-pack)`);
                 }
+
+                // Subscription Purchase
                 if (item.price.product === SUBSCRIPTION_PRODUCT_ID) {
                     updateData.status = 'active';
+
+                    // 🆕 SET FREE TRIAL: 1 month from now (ONLY if not already set)
+                    if (!client.trial_ends_at) {
+                        const trialEnd = new Date();
+                        trialEnd.setMonth(trialEnd.getMonth() + 1); // 1 month from now
+                        updateData.trial_ends_at = trialEnd.toISOString();
+                        console.log(`   🎁 Setting 1-month free trial for ${email} until ${trialEnd.toLocaleDateString()}`);
+                    } else {
+                        console.log(`   ⏭️  Trial already exists for ${email}, skipping trial setup`);
+                    }
                 }
             }
+
             if (Object.keys(updateData).length > 0) {
                 await supabase.from('clients').update(updateData).eq('id', client.id);
+                console.log(`   ✅ Updated client ${email}:`, Object.keys(updateData));
             }
         }
-    } catch (err) { console.error(err); }
+    } catch (err) {
+        console.error("Checkout Handler Error:", err);
+    }
 }
 
 async function handleInvoicePaid(invoice, email, supabase) {
@@ -153,33 +175,48 @@ async function handleInvoicePaid(invoice, email, supabase) {
         const { data: client } = await supabase.from('clients').select('id, image_credits').eq('email', email).single();
         if (!client) return;
 
-        let creditsToAdd = 0;
+        let subscriptionRenewal = false;
+        let creditPurchase = 0;
         let shouldActivate = false;
 
         lines.forEach(line => {
-            // 1. Subscription Renewal (+100 Credits)
+            // 1. Subscription Renewal (RESET to 100 Credits)
             if (line.price.product === SUBSCRIPTION_PRODUCT_ID) {
-                creditsToAdd += 100;
+                subscriptionRenewal = true;
                 shouldActivate = true;
-                console.log(`   🔄 Subscription Renewal Detected.`);
+                console.log(`   🔄 Subscription Renewal: Resetting to 100 credits (no carry over)`);
             }
-            // 2. Auto-Refill Item (+300 Credits)
+            // 2. Auto-Refill Item (ADD 300 Credits)
             // Note: We check Product ID because Price ID might change
             if (line.price.product === CREDITS_PRODUCT_ID) {
                 const qty = line.quantity || 1;
-                creditsToAdd += (300 * qty);
-                console.log(`   ⚡ Auto-Refill Payment Detected.`);
+                creditPurchase += (300 * qty);
+                console.log(`   ⚡ Auto-Refill Payment: Adding ${300 * qty} credits`);
             }
         });
 
-        if (creditsToAdd > 0 || shouldActivate) {
-            const updateData = { image_credits: (client.image_credits || 0) + creditsToAdd };
+        if (subscriptionRenewal || creditPurchase > 0 || shouldActivate) {
+            const updateData = {};
+
+            // SUBSCRIPTION RENEWAL: Reset to 100 credits (no carry over)
+            if (subscriptionRenewal) {
+                updateData.image_credits = 100;
+                console.log(`   🔄 Monthly reset: ${client.image_credits} → 100 credits`);
+            }
+            // CREDIT PURCHASE: Add to existing balance
+            else if (creditPurchase > 0) {
+                updateData.image_credits = (client.image_credits || 0) + creditPurchase;
+                console.log(`   💰 Credit purchase: ${client.image_credits} + ${creditPurchase} = ${updateData.image_credits}`);
+            }
+
             if (shouldActivate) updateData.status = 'active';
 
             await supabase.from('clients').update(updateData).eq('id', client.id);
-            console.log(`   ✅ Added ${creditsToAdd} credits to ${email}.`);
+            console.log(`   ✅ Updated credits for ${email}: ${updateData.image_credits} credits`);
         }
-    } catch (err) { console.error(err); }
+    } catch (err) {
+        console.error("Invoice Handler Error:", err);
+    }
 }
 export async function createPortalSession(stripeCustomerId) {
     // This creates a temporary, secure link that logs the user into Stripe

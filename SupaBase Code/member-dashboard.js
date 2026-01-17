@@ -19,7 +19,7 @@ serve(async (req) => {
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-      { global: { headers: { Authorization: req.headers.get('Authorization')! } } }
+      { global: { headers: { Authorization: req.headers.get('Authorization') || '' } } }
     )
 
     // -----------------------------------------------------------
@@ -61,7 +61,7 @@ serve(async (req) => {
     
     if (!client) throw new Error("Client not found")
 
-    let sessionConfig: any = {
+    let sessionConfig = {
         payment_method_types: ['card'],
         success_url: returnUrl,
         cancel_url: returnUrl,

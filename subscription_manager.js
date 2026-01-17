@@ -28,20 +28,37 @@ export async function validateClientAccess(supabase, apiKey) {
 }
 
 // 2. DEDUCTION CHECK (Run only when Generating)
-// This checks for credits, deducts 1, and triggers auto-refill if low.
+// This checks for free trial, then credits, deducts 1, and triggers auto-refill if low.
 export async function deductImageCredit(supabase, clientId) {
     try {
-        // Fetch fresh balance
+        // Fetch fresh balance AND trial status
         const { data: client } = await supabase
             .from('clients')
-            .select('id, image_credits, auto_replenish, stripe_customer_id')
+            .select('id, image_credits, auto_replenish, stripe_customer_id, trial_ends_at, company_name')
             .eq('id', clientId)
             .single();
 
         if (!client) return false;
 
+        // 🆕 CHECK: Is client in free trial period?
+        const now = new Date();
+        const trialEnd = client.trial_ends_at ? new Date(client.trial_ends_at) : null;
+
+        if (trialEnd && trialEnd > now) {
+            // FREE TRIAL: Unlimited rendering (no credit deduction)
+            const daysRemaining = Math.ceil((trialEnd - now) / (1000 * 60 * 60 * 24));
+            console.log(`🎁 Free Trial Active for ${client.company_name || 'Client'}. Unlimited rendering (${daysRemaining} days remaining until ${trialEnd.toLocaleDateString()})`);
+            return true; // Allow generation WITHOUT deducting credits
+        }
+
+        // POST-TRIAL: Check credits as normal
+        if (client.trial_ends_at) {
+            console.log(`💳 Trial ended for ${client.company_name || 'Client'}. Checking credits...`);
+        }
+
         // CHECK: Do they have credits?
         if (!client.image_credits || client.image_credits <= 0) {
+            console.log(`🚫 No credits remaining for ${client.company_name || 'Client'}.`);
             return false; // Block generation
         }
 
@@ -50,6 +67,7 @@ export async function deductImageCredit(supabase, clientId) {
 
         // AUTO-REFILL LOGIC (Moved here)
         if (newBalance <= 5 && client.auto_replenish && client.stripe_customer_id) {
+            console.log(`⚡ Low credits (${newBalance}). Triggering auto-refill for ${client.company_name || 'Client'}...`);
             triggerAutoRefill(client.stripe_customer_id);
         }
 
@@ -59,6 +77,7 @@ export async function deductImageCredit(supabase, clientId) {
             .update({ image_credits: newBalance })
             .eq('id', clientId);
 
+        console.log(`✅ Credit deducted for ${client.company_name || 'Client'}. New balance: ${newBalance}`);
         return true; // Success
 
     } catch (err) {
