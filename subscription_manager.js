@@ -13,8 +13,10 @@ export async function validateClientAccess(supabase, apiKey) {
 
         if (error || !client) return { allowed: false, error: "Invalid Key" };
 
-        // Strictly enforce Active Subscription
-        if (client.status !== 'active') return { allowed: false, error: "Service Suspended: Subscription Inactive." };
+        // Allow active or trial subscriptions
+        if (client.status !== 'active' && client.status !== 'trial') {
+            return { allowed: false, error: "Service Suspended: Subscription Inactive." };
+        }
 
         // Note: We do NOT check for >0 credits here anymore. 
         // Users can chat for free even with 0 credits.
