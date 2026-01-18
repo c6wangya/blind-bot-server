@@ -15,7 +15,9 @@ const isProd = APP_ENV === 'prod';
 const isBeta = APP_ENV === 'beta';
 
 // Parse FRONTEND_ORIGINS from comma-separated string
-const FRONTEND_ORIGINS = (process.env.FRONTEND_ORIGINS || '')
+// Default to theblindbots.com if not specified
+const DEFAULT_ORIGINS = 'https://www.theblindbots.com';
+const FRONTEND_ORIGINS = (process.env.FRONTEND_ORIGINS || DEFAULT_ORIGINS)
     .split(',')
     .map(s => s.trim())
     .filter(Boolean);
