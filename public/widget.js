@@ -4,19 +4,37 @@
     // 2. GTM/dynamic: window.BLINDBOT_API_KEY = "xxx" before loading script
     // 3. GTM via script src query param: widget.js?key=xxx
 
+    // Debug: find all script tags
+    const allScripts = document.querySelectorAll('script');
+    console.log("BlindBot Debug: All scripts:", allScripts.length);
+    allScripts.forEach((s, i) => {
+        if (s.src && s.src.includes('widget')) console.log(`  [${i}] src:`, s.src);
+        if (s.getAttribute('data-gtmsrc')) console.log(`  [${i}] data-gtmsrc:`, s.getAttribute('data-gtmsrc'));
+    });
+
     const scriptTag = document.currentScript
         || document.querySelector('script[data-api-key]')
         || document.querySelector('script[data-gtmsrc*="widget.js"]');
+
+    console.log("BlindBot Debug: scriptTag found:", scriptTag);
+    if (scriptTag) {
+        console.log("BlindBot Debug: scriptTag.src:", scriptTag.src);
+        console.log("BlindBot Debug: data-gtmsrc:", scriptTag.getAttribute('data-gtmsrc'));
+    }
 
     // Extract API key from script src or GTM's data-gtmsrc attribute
     function getKeyFromSrc() {
         if (!scriptTag) return null;
         const srcUrl = scriptTag.src || scriptTag.getAttribute('data-gtmsrc');
+        console.log("BlindBot Debug: srcUrl for key extraction:", srcUrl);
         if (!srcUrl) return null;
         try {
             const url = new URL(srcUrl);
-            return url.searchParams.get('key');
+            const key = url.searchParams.get('key');
+            console.log("BlindBot Debug: extracted key:", key);
+            return key;
         } catch (e) {
+            console.log("BlindBot Debug: URL parse error:", e);
             return null;
         }
     }
@@ -24,6 +42,8 @@
     const apiKey = window.BLINDBOT_API_KEY
         || (scriptTag && scriptTag.getAttribute('data-api-key'))
         || getKeyFromSrc();
+
+    console.log("BlindBot Debug: final apiKey:", apiKey);
 
     // Server URL: global override or derive from script src
     const SERVER_URL = window.BLINDBOT_API_BASE
