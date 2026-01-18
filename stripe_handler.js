@@ -156,18 +156,26 @@ export async function seedDemoData(supabase, clientId) {
         });
     }
 
-    // 3. Copy demo PDF
-    const { data: demoClient } = await supabase
+    // 3. Copy demo PDF (only if client has no PDF)
+    const { data: targetClient } = await supabase
         .from('clients')
-        .select('training_pdf, training_pdf_meta')
-        .eq('id', DEMO_CLIENT_ID)
+        .select('training_pdf')
+        .eq('id', clientId)
         .single();
 
-    if (demoClient?.training_pdf) {
-        await supabase.from('clients').update({
-            training_pdf: demoClient.training_pdf,
-            training_pdf_meta: demoClient.training_pdf_meta || 'Demo Guide.pdf'
-        }).eq('id', clientId);
+    if (!targetClient?.training_pdf) {
+        const { data: demoClient } = await supabase
+            .from('clients')
+            .select('training_pdf, training_pdf_meta')
+            .eq('id', DEMO_CLIENT_ID)
+            .single();
+
+        if (demoClient?.training_pdf) {
+            await supabase.from('clients').update({
+                training_pdf: demoClient.training_pdf,
+                training_pdf_meta: demoClient.training_pdf_meta || 'Demo Guide.pdf'
+            }).eq('id', clientId);
+        }
     }
 
     console.log(`   ✅ Seeded ${demoProducts?.length || 0} demo products`);
