@@ -4,13 +4,21 @@
     // 2. GTM/dynamic: window.BLINDBOT_API_KEY = "xxx" before loading script
     // 3. GTM via script src query param: widget.js?key=xxx
 
-    const scriptTag = document.currentScript || document.querySelector('script[data-api-key]');
+    const scriptTag = document.currentScript
+        || document.querySelector('script[data-api-key]')
+        || document.querySelector('script[data-gtmsrc*="widget.js"]');
 
-    // Extract API key from script src query param (for GTM)
+    // Extract API key from script src or GTM's data-gtmsrc attribute
     function getKeyFromSrc() {
-        if (!scriptTag || !scriptTag.src) return null;
-        const url = new URL(scriptTag.src);
-        return url.searchParams.get('key');
+        if (!scriptTag) return null;
+        const srcUrl = scriptTag.src || scriptTag.getAttribute('data-gtmsrc');
+        if (!srcUrl) return null;
+        try {
+            const url = new URL(srcUrl);
+            return url.searchParams.get('key');
+        } catch (e) {
+            return null;
+        }
     }
 
     const apiKey = window.BLINDBOT_API_KEY
