@@ -2,16 +2,20 @@
     // Support multiple injection methods:
     // 1. Direct footer: <script src="...widget.js" data-api-key="xxx">
     // 2. GTM/dynamic: window.BLINDBOT_API_KEY = "xxx" before loading script
-
-    // Debug: Log what we can see
-    console.log("BlindBot Debug: window.BLINDBOT_API_KEY =", window.BLINDBOT_API_KEY);
+    // 3. GTM via script src query param: widget.js?key=xxx
 
     const scriptTag = document.currentScript || document.querySelector('script[data-api-key]');
-    console.log("BlindBot Debug: scriptTag =", scriptTag);
-    console.log("BlindBot Debug: data-api-key attr =", scriptTag && scriptTag.getAttribute('data-api-key'));
+
+    // Extract API key from script src query param (for GTM)
+    function getKeyFromSrc() {
+        if (!scriptTag || !scriptTag.src) return null;
+        const url = new URL(scriptTag.src);
+        return url.searchParams.get('key');
+    }
 
     const apiKey = window.BLINDBOT_API_KEY
-        || (scriptTag && scriptTag.getAttribute('data-api-key'));
+        || (scriptTag && scriptTag.getAttribute('data-api-key'))
+        || getKeyFromSrc();
 
     // Server URL: global override or derive from script src
     const SERVER_URL = window.BLINDBOT_API_BASE
