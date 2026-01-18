@@ -22,6 +22,10 @@ const FRONTEND_ORIGINS = (process.env.FRONTEND_ORIGINS || DEFAULT_ORIGINS)
     .map(s => s.trim())
     .filter(Boolean);
 
+// Startup log
+console.log(`[CONFIG] APP_ENV=${APP_ENV}, isBeta=${isBeta}`);
+console.log(`[CONFIG] FRONTEND_ORIGINS=${JSON.stringify(FRONTEND_ORIGINS)}`);
+
 // Base URLs for link generation
 const FRONTEND_BASE_URL = process.env.FRONTEND_BASE_URL || 'https://www.theblindbots.com';
 const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL || 'https://blind-bot-server.onrender.com';
@@ -45,11 +49,14 @@ function isAllowedOrigin(origin) {
     // Check exact match in allowlist
     if (FRONTEND_ORIGINS.includes(origin)) return true;
 
-    // Beta mode: allow Softr preview origins
+    // Beta mode: allow Softr preview origins + localhost for testing
     if (isBeta) {
         try {
             const url = new URL(origin);
             const hostname = url.hostname;
+
+            // Allow localhost for local testing
+            if (hostname === 'localhost' || hostname === '127.0.0.1') return true;
 
             // Allow studio.softr.io explicitly
             if (hostname === 'studio.softr.io') return true;
@@ -73,8 +80,13 @@ function isAllowedOrigin(origin) {
  */
 function corsOptions(req, callback) {
     const origin = req.header('Origin');
+    const method = req.method;
+    const path = req.path;
+
+    console.log(`[CORS] ${method} ${path} from origin: ${origin || '(none)'}`);
 
     if (isAllowedOrigin(origin)) {
+        console.log(`[CORS] Allowed: ${origin}`);
         callback(null, {
             origin: true,
             credentials: true,
@@ -82,7 +94,7 @@ function corsOptions(req, callback) {
             allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
         });
     } else {
-        console.warn(`[CORS] Rejected origin: ${origin} (env: ${APP_ENV})`);
+        console.warn(`[CORS] REJECTED origin: ${origin} (env: ${APP_ENV}, allowlist: ${JSON.stringify(FRONTEND_ORIGINS)})`);
         callback(null, { origin: false });
     }
 }
