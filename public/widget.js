@@ -5,11 +5,25 @@
     // 3. GTM via script src query param: widget.js?key=xxx
     // 4. GTM with data attribute: <script src="...widget.js" data-blindbot-key="xxx">
 
+    // DEBUG: Log all script tags and their attributes
+    console.log("BlindBot: Scanning scripts...");
+    document.querySelectorAll('script').forEach((s, i) => {
+        const attrs = Array.from(s.attributes).map(a => `${a.name}="${a.value}"`).join(' ');
+        if (attrs.includes('widget') || attrs.includes('blindbot') || attrs.includes('gtm')) {
+            console.log(`  Script[${i}]: ${attrs}`);
+        }
+    });
+
     // Find script tag - try multiple selectors
     const scriptTag = document.currentScript
         || document.querySelector('script[data-api-key]')
         || document.querySelector('script[data-blindbot-key]')
         || document.querySelector('script[src*="widget.js"]');
+
+    console.log("BlindBot: scriptTag =", scriptTag);
+    if (scriptTag) {
+        console.log("BlindBot: scriptTag.outerHTML =", scriptTag.outerHTML);
+    }
 
     // Extract API key from various sources
     function getKeyFromSrc() {
@@ -28,6 +42,8 @@
         || (scriptTag && scriptTag.getAttribute('data-api-key'))
         || (scriptTag && scriptTag.getAttribute('data-blindbot-key'))
         || getKeyFromSrc();
+
+    console.log("BlindBot: apiKey =", apiKey);
 
     // Server URL: global override or derive from script src
     const SERVER_URL = window.BLINDBOT_API_BASE
