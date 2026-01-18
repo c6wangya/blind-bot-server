@@ -1,10 +1,16 @@
 (function() {
+    // Support multiple injection methods:
+    // 1. Direct footer: <script src="...widget.js" data-api-key="xxx">
+    // 2. GTM/dynamic: window.BLINDBOT_API_KEY = "xxx" before loading script
     const scriptTag = document.currentScript || document.querySelector('script[data-api-key]');
-    const apiKey = scriptTag.getAttribute('data-api-key');
-    // Use global override if set, otherwise derive from script origin
-    const SERVER_URL = window.BLINDBOT_API_BASE || new URL(scriptTag.src).origin; 
+    const apiKey = window.BLINDBOT_API_KEY
+        || (scriptTag && scriptTag.getAttribute('data-api-key'));
 
-    if (!apiKey) return console.error("BlindBot: No API Key found.");
+    // Server URL: global override or derive from script src
+    const SERVER_URL = window.BLINDBOT_API_BASE
+        || (scriptTag && scriptTag.src ? new URL(scriptTag.src).origin : 'https://blind-bot-server.onrender.com');
+
+    if (!apiKey) return console.error("BlindBot: No API Key found. Set window.BLINDBOT_API_KEY or use data-api-key attribute.");
 
     // Fetch Client Config from Server
     fetch(`${SERVER_URL}/client-config/${apiKey}`)
