@@ -1,6 +1,9 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { createClient } from '@supabase/supabase-js';
 import axios from 'axios';
@@ -23,6 +26,9 @@ import { downloadAndConvertImage, ensureBrowserCompatible, compressForRendering 
 import { processPDFPipeline } from './services/pdf/pipeline.js';
 import { APP_ENV, corsOptions, EMAIL_FROM_SUPPORT, EMAIL_ADMIN_TO } from './config.js';
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 const require = createRequire(import.meta.url);
 
 dotenv.config();
@@ -32,6 +38,24 @@ const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY
 setupStripeWebhook(app, supabase);
 app.use(express.json({ limit: '50mb' }));
 app.use(express.static('public'));
+
+// Dynamic widget route: /widget/API_KEY.js - for GTM compatibility
+// GTM strips query params and data attributes, so embed the key in the URL path
+app.get('/widget/:apiKey.js', (req, res) => {
+    const apiKey = req.params.apiKey;
+    const widgetPath = path.join(__dirname, 'public', 'widget.js');
+
+    fs.readFile(widgetPath, 'utf8', (err, content) => {
+        if (err) {
+            return res.status(500).send('Error loading widget');
+        }
+        // Inject API key at the top of the script
+        const injectedScript = `window.BLINDBOT_API_KEY = "${apiKey}";\n` + content;
+        res.setHeader('Content-Type', 'application/javascript');
+        res.send(injectedScript);
+    });
+});
+
 setupStatsRoutes(app, supabase);
 const resend = new Resend(process.env.RESEND_API_KEY);
 
