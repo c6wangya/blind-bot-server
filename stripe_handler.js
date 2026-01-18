@@ -1,15 +1,15 @@
 // stripe_handler.js
 import Stripe from 'stripe';
 import express from 'express';
-import { getFrontendUrl } from './config.js';
+import { getFrontendUrl, DEMO_CLIENT_ID } from './config.js';
 
 // --- CONFIGURATION ---
 // CRITICAL: You need the PRICE ID (starts with 'price_...'), not the Product ID.
 // Go to Stripe Dashboard > Products > Click the 300 Credits Product > Look for the Pricing ID.
 const CREDITS_PRICE_ID = 'price_1SpTgAQh2fQ2r8jEPRLQtZ4T'; 
 
-const CREDITS_PRODUCT_ID = 'prod_Tn3n7Rv1dsonQn';      
-const SUBSCRIPTION_PRODUCT_ID = 'prod_Tn4FHxNAnhesep'; 
+const CREDITS_PRODUCT_ID = 'prod_Tn3n7Rv1dsonQn';
+const SUBSCRIPTION_PRODUCT_ID = 'prod_Tn4FHxNAnhesep';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
@@ -120,7 +120,58 @@ export function setupStripeWebhook(app, supabase) {
         res.json({ received: true });
     });
 }
-// --- INTERNAL HELPERS ---
+// --- EXPORTED HELPERS ---
+
+export async function seedDemoData(supabase, clientId) {
+    if (!DEMO_CLIENT_ID) {
+        console.log('   ⏭️ DEMO_CLIENT_ID not configured, skipping seed');
+        return;
+    }
+
+    // 1. Check if client already has products (idempotent)
+    const { count } = await supabase
+        .from('product_gallery')
+        .select('*', { count: 'exact', head: true })
+        .eq('client_id', clientId);
+
+    if (count > 0) {
+        console.log(`   ⏭️ Client already has ${count} products, skipping seed`);
+        return;
+    }
+
+    // 2. Copy demo products
+    const { data: demoProducts } = await supabase
+        .from('product_gallery')
+        .select('*')
+        .eq('client_id', DEMO_CLIENT_ID)
+        .eq('is_template', true)
+        .limit(5);
+
+    for (const p of demoProducts || []) {
+        const { id, client_id, created_at, ...productData } = p;
+        await supabase.from('product_gallery').insert({
+            ...productData,
+            client_id: clientId,
+            is_template: true
+        });
+    }
+
+    // 3. Copy demo PDF
+    const { data: demoClient } = await supabase
+        .from('clients')
+        .select('training_pdf, training_pdf_meta')
+        .eq('id', DEMO_CLIENT_ID)
+        .single();
+
+    if (demoClient?.training_pdf) {
+        await supabase.from('clients').update({
+            training_pdf: demoClient.training_pdf,
+            training_pdf_meta: demoClient.training_pdf_meta || 'Demo Guide.pdf'
+        }).eq('id', clientId);
+    }
+
+    console.log(`   ✅ Seeded ${demoProducts?.length || 0} demo products`);
+}
 
 async function handleCheckout(session, email, stripe, supabase) {
     try {
@@ -129,11 +180,11 @@ async function handleCheckout(session, email, stripe, supabase) {
 
         if (client) {
             let updateData = {};
+
             for (const item of lineItems.data) {
                 if (item.price.product === CREDITS_PRODUCT_ID) {
                     const qty = item.quantity || 1;
                     const current = client.image_credits || 0;
-                    // Fix: Ensure we don't overwrite if multiple packs bought
                     const base = updateData.image_credits !== undefined ? updateData.image_credits : current;
                     updateData.image_credits = base + (300 * qty);
                 }

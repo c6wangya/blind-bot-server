@@ -36,6 +36,9 @@ const EMAIL_FROM_ALERTS = process.env.EMAIL_FROM_ALERTS || 'The Blinds Bot <aler
 const EMAIL_FROM_SUPPORT = process.env.EMAIL_FROM_SUPPORT || 'Client Support <help@support.theblindbots.com>';
 const EMAIL_ADMIN_TO = process.env.EMAIL_ADMIN_TO || 'rob.wen@theblindbots.com';
 
+// Demo client ID for auto-seeding new users
+const DEMO_CLIENT_ID = process.env.DEMO_CLIENT_ID || null;
+
 /**
  * Check if origin is allowed for CORS
  * - Always allow requests with no Origin (curl, health checks)
@@ -131,6 +134,7 @@ export {
     EMAIL_FROM_ALERTS,
     EMAIL_FROM_SUPPORT,
     EMAIL_ADMIN_TO,
+    DEMO_CLIENT_ID,
     isAllowedOrigin,
     corsOptions,
     getWidgetScriptTag,

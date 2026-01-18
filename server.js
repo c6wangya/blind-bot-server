@@ -11,7 +11,7 @@ import { TaskType } from "@google/generative-ai";
 import { startProductWorker } from './product_worker.js';
 import { validateClientAccess, deductImageCredit } from './subscription_manager.js';
 import { startPersonaWorker, forceRetrainClient } from './persona_worker.js';
-import { setupStripeWebhook, createPortalSession } from './stripe_handler.js';
+import { setupStripeWebhook, createPortalSession, seedDemoData } from './stripe_handler.js';
 import { handleLeadData } from './leads_manager.js';
 import { setupPreviewRoutes } from './preview_handler.js';
 import { scrapeAndSaveProducts } from './product_scraper.js';
@@ -185,9 +185,9 @@ app.get('/client-config/:apiKey', async (req, res) => {
             name: client.company_name,
             greeting: client.greeting_override || "",
             alignment: client.widget_alignment || 'right',
-            sideMargin: client.widget_side_margin || 20,
-            bottomMargin: client.widget_bottom_margin || 20,
-            height: client.widget_height || 600,
+            sideMargin: client.widget_side_margin ?? 20,
+            bottomMargin: client.widget_bottom_margin ?? 20,
+            height: client.widget_height ?? 600,
             emails: defaultEmails, // Sends "rob@test.com" or "rob@test.com, jim@test.com"
             websiteUrl: client.website_url || ""
         });
@@ -532,6 +532,19 @@ app.post('/train-agent', async (req, res) => {
     try {
         const { clientApiKey } = req.body;
         if (!clientApiKey) return res.status(400).json({ error: "Missing API Key" });
+
+        // Get client ID for seeding check
+        const { data: client } = await supabase
+            .from('clients')
+            .select('id')
+            .eq('api_key', clientApiKey)
+            .single();
+
+        if (!client) return res.status(401).json({ error: "Invalid API Key" });
+
+        // Seed demo data if product list is empty
+        console.log(`🌱 Checking demo seed for client: ${client.id}`);
+        await seedDemoData(supabase, client.id);
 
         // Trigger the manual retrain
         await forceRetrainClient(clientApiKey);
