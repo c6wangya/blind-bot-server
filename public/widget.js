@@ -1,8 +1,8 @@
 (function() {
     const scriptTag = document.currentScript || document.querySelector('script[data-api-key]');
     const apiKey = scriptTag.getAttribute('data-api-key');
-    // Derive SERVER_URL from the script's own origin (works for prod/beta automatically)
-    const SERVER_URL = new URL(scriptTag.src).origin; 
+    // Use global override if set, otherwise derive from script origin
+    const SERVER_URL = window.BLINDBOT_API_BASE || new URL(scriptTag.src).origin; 
 
     if (!apiKey) return console.error("BlindBot: No API Key found.");
 
@@ -22,9 +22,9 @@
         // Defaults if missing
         const isMobile = window.innerWidth <= 768;
         const align = config.alignment || 'right';
-        const sideGap = (config.sideMargin !== undefined) ? config.sideMargin : 20;
-        const bottomGap = (config.bottomMargin !== undefined) ? config.bottomMargin : (isMobile ? 100 : 20);
-        const chatHeight = (config.height !== undefined) ? config.height : 520;
+        const sideGap = config.sideMargin ?? 20;
+        const bottomGap = config.bottomMargin ?? (isMobile ? 100 : 20);
+        const chatHeight = config.height ?? 520;
 
         // 1. Create Container
         const container = document.createElement('div');
